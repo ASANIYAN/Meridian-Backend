@@ -7,6 +7,9 @@ import { MembershipsModule } from './memberships/memberships.module';
 import { SnapshotsModule } from './snapshots/snapshots.module';
 import { OperationsModule } from './operations/operations.module';
 import { ShareLinksModule } from './share_links/share_links.module';
+import { PasswordResetTokensModule } from './password_reset_tokens/password_reset_tokens.module';
+import { OutboxModule } from './outbox/outbox.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -18,7 +21,9 @@ import { ShareLinksModule } from './share_links/share_links.module';
     SnapshotsModule,
     OperationsModule,
     ShareLinksModule,
+    PasswordResetTokensModule,
+    OutboxModule,
   ],
-  controllers: [],
+  controllers: [AppController],
 })
 export class AppModule {}
