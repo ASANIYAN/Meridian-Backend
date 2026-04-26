@@ -9,7 +9,9 @@ describe('PasswordResetTokensService', () => {
       providers: [PasswordResetTokensService],
     }).compile();
 
-    service = module.get<PasswordResetTokensService>(PasswordResetTokensService);
+    service = module.get<PasswordResetTokensService>(
+      PasswordResetTokensService,
+    );
   });
 
   it('should be defined', () => {

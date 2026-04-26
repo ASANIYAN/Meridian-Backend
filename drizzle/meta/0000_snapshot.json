@@ -62,12 +62,8 @@
           "name": "documents_created_by_users_id_fk",
           "tableFrom": "documents",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -75,12 +71,8 @@
           "name": "documents_latest_snapshot_id_snapshots_id_fk",
           "tableFrom": "documents",
           "tableTo": "snapshots",
-          "columnsFrom": [
-            "latest_snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["latest_snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -141,12 +133,8 @@
           "name": "snapshots_document_id_documents_id_fk",
           "tableFrom": "snapshots",
           "tableTo": "documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -215,12 +203,8 @@
           "name": "memberships_document_id_documents_id_fk",
           "tableFrom": "memberships",
           "tableTo": "documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -228,12 +212,8 @@
           "name": "memberships_user_id_users_id_fk",
           "tableFrom": "memberships",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -243,10 +223,7 @@
         "memberships_document_id_user_id_unique": {
           "name": "memberships_document_id_user_id_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "document_id",
-            "user_id"
-          ]
+          "columns": ["document_id", "user_id"]
         }
       },
       "policies": {},
@@ -355,12 +332,8 @@
           "name": "operations_document_id_documents_id_fk",
           "tableFrom": "operations",
           "tableTo": "documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -368,12 +341,8 @@
           "name": "operations_user_id_users_id_fk",
           "tableFrom": "operations",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -383,10 +352,7 @@
         "operations_document_id_operation_sequence_unique": {
           "name": "operations_document_id_operation_sequence_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "document_id",
-            "operation_sequence"
-          ]
+          "columns": ["document_id", "operation_sequence"]
         }
       },
       "policies": {},
@@ -471,12 +437,8 @@
           "name": "outbox_operation_id_operations_id_fk",
           "tableFrom": "outbox",
           "tableTo": "operations",
-          "columnsFrom": [
-            "operation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["operation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -558,12 +520,8 @@
           "name": "password_reset_tokens_user_id_users_id_fk",
           "tableFrom": "password_reset_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -656,12 +614,8 @@
           "name": "share_links_document_id_documents_id_fk",
           "tableFrom": "share_links",
           "tableTo": "documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -669,12 +623,8 @@
           "name": "share_links_created_by_users_id_fk",
           "tableFrom": "share_links",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -682,12 +632,8 @@
           "name": "share_links_claimed_by_users_id_fk",
           "tableFrom": "share_links",
           "tableTo": "users",
-          "columnsFrom": [
-            "claimed_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["claimed_by"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -697,9 +643,7 @@
         "share_links_token_unique": {
           "name": "share_links_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -769,9 +713,7 @@
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         }
       },
       "policies": {},
@@ -783,38 +725,22 @@
     "public.document_status": {
       "name": "document_status",
       "schema": "public",
-      "values": [
-        "draft",
-        "active",
-        "inactive",
-        "deleted"
-      ]
+      "values": ["draft", "active", "inactive", "deleted"]
     },
     "public.membership_mode": {
       "name": "membership_mode",
       "schema": "public",
-      "values": [
-        "invite",
-        "link"
-      ]
+      "values": ["invite", "link"]
     },
     "public.membership_role": {
       "name": "membership_role",
       "schema": "public",
-      "values": [
-        "author",
-        "editor",
-        "viewer"
-      ]
+      "values": ["author", "editor", "viewer"]
     },
     "public.operation_type": {
       "name": "operation_type",
       "schema": "public",
-      "values": [
-        "insert",
-        "delete",
-        "format"
-      ]
+      "values": ["insert", "delete", "format"]
     }
   },
   "schemas": {},

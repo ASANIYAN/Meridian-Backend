@@ -4,6 +4,6 @@ import { ShareLinksController } from './share_links.controller';
 
 @Module({
   providers: [ShareLinksService],
-  controllers: [ShareLinksController]
+  controllers: [ShareLinksController],
 })
 export class ShareLinksModule {}

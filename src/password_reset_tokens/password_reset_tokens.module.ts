@@ -4,6 +4,6 @@ import { PasswordResetTokensController } from './password_reset_tokens.controlle
 
 @Module({
   providers: [PasswordResetTokensService],
-  controllers: [PasswordResetTokensController]
+  controllers: [PasswordResetTokensController],
 })
 export class PasswordResetTokensModule {}

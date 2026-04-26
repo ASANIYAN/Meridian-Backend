@@ -9,7 +9,9 @@ describe('PasswordResetTokensController', () => {
       controllers: [PasswordResetTokensController],
     }).compile();
 
-    controller = module.get<PasswordResetTokensController>(PasswordResetTokensController);
+    controller = module.get<PasswordResetTokensController>(
+      PasswordResetTokensController,
+    );
   });
 
   it('should be defined', () => {

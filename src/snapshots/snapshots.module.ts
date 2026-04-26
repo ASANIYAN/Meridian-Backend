@@ -4,6 +4,6 @@ import { SnapshotsController } from './snapshots.controller';
 
 @Module({
   providers: [SnapshotsService],
-  controllers: [SnapshotsController]
+  controllers: [SnapshotsController],
 })
 export class SnapshotsModule {}

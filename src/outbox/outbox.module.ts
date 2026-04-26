@@ -4,6 +4,6 @@ import { OutboxService } from './outbox.service';
 
 @Module({
   controllers: [OutboxController],
-  providers: [OutboxService]
+  providers: [OutboxService],
 })
 export class OutboxModule {}
