@@ -23,12 +23,10 @@ export class AuthController {
     const result = await this.authService.signup(data);
 
     return buildSuccessResponse(
-      result.verificationEmailSent
-        ? 'Account created successfully. Verification email sent.'
-        : 'Account created successfully, but the verification email could not be sent.',
+      'Account created successfully. You should receive a verification email shortly.',
       {
         user: result.user,
-        verificationEmailSent: result.verificationEmailSent,
+        verificationEmailQueued: result.verificationEmailQueued,
       },
     );
   }
@@ -46,7 +44,7 @@ export class AuthController {
 
     return buildSuccessResponse(
       result.alreadyVerified
-        ? 'Email address is already verified.'
+        ? 'Email address is already verified. You can proceed to login.'
         : 'Email address verified successfully.',
       result,
     );
@@ -56,19 +54,12 @@ export class AuthController {
   async resendVerificationEmail(
     @Body() data: ResendVerificationEmailDto,
   ): Promise<
-    SuccessResponse<{
-      user: Awaited<ReturnType<AuthService['resendVerificationEmail']>>['user'];
-      verificationEmailSent: Awaited<
-        ReturnType<AuthService['resendVerificationEmail']>
-      >['verificationEmailSent'];
-    }>
+    SuccessResponse<Awaited<ReturnType<AuthService['resendVerificationEmail']>>>
   > {
     const result = await this.authService.resendVerificationEmail(data);
 
     return buildSuccessResponse(
-      result.verificationEmailSent
-        ? 'Verification email sent successfully.'
-        : 'Verification token refreshed, but the verification email could not be sent.',
+      'If an account with that email exists and is not yet verified, you should receive a verification email shortly.',
       result,
     );
   }

@@ -28,12 +28,11 @@ import { MailService } from '../mail/mail.service';
 
 type SignupResult = {
   user: typeof schema.users.$inferSelect;
-  verificationEmailSent: boolean;
+  verificationEmailQueued: true;
 };
 
 type ResendVerificationEmailResult = {
-  user: typeof schema.users.$inferSelect;
-  verificationEmailSent: boolean;
+  accepted: true;
 };
 
 @Injectable()
@@ -84,6 +83,10 @@ export class AuthService {
     }
   }
 
+  private queueVerificationEmail(email: string, token: string) {
+    void this.sendVerificationEmail(email, token);
+  }
+
   private isUniqueEmailViolation(error: unknown) {
     return (
       typeof error === 'object' &&
@@ -119,14 +122,11 @@ export class AuthService {
 
       this.logger.log(`Created user account for ${email}`);
 
-      const verificationEmailSent = await this.sendVerificationEmail(
-        email,
-        verificationToken.rawToken,
-      );
+      this.queueVerificationEmail(email, verificationToken.rawToken);
 
       return {
         user,
-        verificationEmailSent,
+        verificationEmailQueued: true,
       };
     } catch (error) {
       if (error instanceof ConflictException) {
@@ -202,16 +202,22 @@ export class AuthService {
     const { email } = data;
     const user = await this.getUserByEmail(email);
     if (!user) {
-      throw new NotFoundException('Account not found');
+      this.logger.log(
+        `Ignoring verification resend request for non-existent account: ${email}`,
+      );
+      return { accepted: true };
     }
 
     if (user.verifiedAt) {
-      throw new ConflictException('Account already verified');
+      this.logger.log(
+        `Ignoring verification resend request for verified account: ${email}`,
+      );
+      return { accepted: true };
     }
 
     try {
       const verificationToken = await this.generateVerificationToken();
-      const [updatedUser] = await this.database
+      await this.database
         .update(schema.users)
         .set({
           updatedAt: new Date(),
@@ -222,23 +228,10 @@ export class AuthService {
         .returning();
 
       this.logger.log(`Updated verification token and hash for ${email}`);
-      const verificationEmailSent = await this.sendVerificationEmail(
-        email,
-        verificationToken.rawToken,
-      );
+      this.queueVerificationEmail(email, verificationToken.rawToken);
 
-      return {
-        user: updatedUser,
-        verificationEmailSent,
-      };
+      return { accepted: true };
     } catch (error) {
-      if (
-        error instanceof NotFoundException ||
-        error instanceof ConflictException
-      ) {
-        throw error;
-      }
-
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
         `Failed to resend verification email for ${email}: ${msg}`,
