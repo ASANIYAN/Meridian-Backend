@@ -11,6 +11,8 @@ import { ShareLinksModule } from './share_links/share_links.module';
 import { PasswordResetTokensModule } from './password_reset_tokens/password_reset_tokens.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { AppController } from './app.controller';
+import { AuthModule } from './auth/auth.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { AppController } from './app.controller';
     ShareLinksModule,
     PasswordResetTokensModule,
     OutboxModule,
+    AuthModule,
+    MailModule,
   ],
   controllers: [AppController],
 })

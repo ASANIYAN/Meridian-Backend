@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { OutboxController } from './outbox.controller';
 import { OutboxService } from './outbox.service';
+import { OutboxController } from './outbox.controller';
 
 @Module({
   controllers: [OutboxController],

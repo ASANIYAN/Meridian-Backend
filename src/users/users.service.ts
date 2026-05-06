@@ -1,4 +1,4 @@
-import * as schema from './schema';
+import * as schema from '../database/schema';
 import { Inject, Injectable } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../database/database-connection';

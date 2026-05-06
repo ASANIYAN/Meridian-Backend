@@ -8,6 +8,13 @@
       "when": 1777168572999,
       "tag": "0000_happy_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777307660666,
+      "tag": "0001_bright_medusa",
+      "breakpoints": true
     }
   ]
 }

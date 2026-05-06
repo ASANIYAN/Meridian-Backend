@@ -16,6 +16,11 @@ export const users = pgTable('users', {
 
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
 
+  verificationTokenHash: text('verification_token_hash'),
+  verificationTokenExpiresAt: timestamp('verification_token_expires_at', {
+    withTimezone: true,
+  }),
+
   createdAt: timestamp('created_at', { withTimezone: true })
     .defaultNow()
     .notNull(),
