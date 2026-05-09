@@ -1,18 +1,21 @@
 import * as schema from '../database/schema';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import {
+  LoginDto,
   RegisterDto,
   ResendVerificationEmailDto,
   VerifyEmailDto,
@@ -20,6 +23,7 @@ import {
 import {
   hashPassword,
   hashValue,
+  verifyPassword,
   verifyValue,
 } from '../common/security/password';
 import { eq } from 'drizzle-orm';
@@ -33,6 +37,10 @@ type SignupResult = {
 
 type ResendVerificationEmailResult = {
   accepted: true;
+};
+
+type LoginResult = {
+  token: string;
 };
 
 @Injectable()
@@ -239,6 +247,55 @@ export class AuthService {
       throw new InternalServerErrorException(
         'Failed to resend verification email',
       );
+    }
+  }
+
+  async login(data: LoginDto): Promise<LoginResult> {
+    const { email, password } = data;
+    const existingUser = await this.getUserByEmail(email);
+
+    if (!existingUser) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const isUserPass = await verifyPassword(
+      password,
+      existingUser.passwordHash,
+    );
+    if (!isUserPass) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (!existingUser.verifiedAt) {
+      const tokenIsStillValid =
+        !!existingUser.verificationTokenExpiresAt &&
+        existingUser.verificationTokenExpiresAt.getTime() > Date.now();
+
+      if (tokenIsStillValid) {
+        throw new ForbiddenException('Account not verified. Check your inbox.');
+      }
+
+      await this.resendVerificationEmail({ email });
+      this.logger.log(`Resent verification email during login for ${email}`);
+      throw new ForbiddenException(
+        'Account not verified. A new verification link has been sent.',
+      );
+    }
+
+    try {
+      const payload = {
+        user_id: existingUser.id,
+        email: existingUser.email,
+        jti: randomUUID(),
+      };
+
+      return {
+        token: await this.jwtService.signAsync(payload),
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to create login token for ${email}: ${msg}`);
+      throw new InternalServerErrorException('Login failed');
     }
   }
 }

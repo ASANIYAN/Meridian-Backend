@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
+  LoginDto,
   RegisterDto,
   ResendVerificationEmailDto,
   VerifyEmailDto,
@@ -62,5 +63,14 @@ export class AuthController {
       'If an account with that email exists and is not yet verified, you should receive a verification email shortly.',
       result,
     );
+  }
+
+  @Post('login')
+  async login(
+    @Body() data: LoginDto,
+  ): Promise<SuccessResponse<Awaited<ReturnType<AuthService['login']>>>> {
+    const result = await this.authService.login(data);
+
+    return buildSuccessResponse('Login successful.', result);
   }
 }
