@@ -13,6 +13,7 @@ import { OutboxModule } from './outbox/outbox.module';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { MailModule } from './mail/mail.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { MailModule } from './mail/mail.module';
     OutboxModule,
     AuthModule,
     MailModule,
+    RedisModule,
   ],
   controllers: [AppController],
 })

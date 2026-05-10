@@ -10,11 +10,13 @@ import {
   buildSuccessResponse,
   type SuccessResponse,
 } from '../common/responses/success-response';
+import { Public } from './decorators/public.decorator';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Public()
   @Post('signup')
   async signup(@Body() data: RegisterDto): Promise<
     SuccessResponse<{
@@ -32,6 +34,7 @@ export class AuthController {
     );
   }
 
+  @Public()
   @Get('verify-email')
   async verifyEmail(@Query() data: VerifyEmailDto): Promise<
     SuccessResponse<{
@@ -51,6 +54,7 @@ export class AuthController {
     );
   }
 
+  @Public()
   @Post('resend-verification-email')
   async resendVerificationEmail(
     @Body() data: ResendVerificationEmailDto,
@@ -65,6 +69,7 @@ export class AuthController {
     );
   }
 
+  @Public()
   @Post('login')
   async login(
     @Body() data: LoginDto,

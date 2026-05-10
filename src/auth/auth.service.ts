@@ -284,7 +284,7 @@ export class AuthService {
 
     try {
       const payload = {
-        user_id: existingUser.id,
+        userId: existingUser.id,
         email: existingUser.email,
         jti: randomUUID(),
       };
