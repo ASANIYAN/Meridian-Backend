@@ -115,7 +115,20 @@ export class AuthController {
   }
 
   @Post('logout')
-  async logout(@Req() req: Request & { user: AuthenticatedUser }) {
-    return this.authService.logout(req.user);
+  async logout(
+    @Req() req: Request & { user: AuthenticatedUser },
+  ): Promise<SuccessResponse<Awaited<ReturnType<AuthService['logout']>>>> {
+    const result = await this.authService.logout(req.user);
+
+    return buildSuccessResponse('Logout successful.', result);
+  }
+
+  @Post('refresh')
+  async refresh(
+    @Req() req: Request & { user: AuthenticatedUser },
+  ): Promise<SuccessResponse<Awaited<ReturnType<AuthService['issueNewJwt']>>>> {
+    const result = await this.authService.issueNewJwt(req.user);
+
+    return buildSuccessResponse('Token refreshed successfully.', result);
   }
 }

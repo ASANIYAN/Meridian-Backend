@@ -85,6 +85,15 @@ export class AuthService {
     return result[0];
   }
 
+  private async getUserById(id: string) {
+    const result = await this.database
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id));
+
+    return result[0];
+  }
+
   private async generateVerificationToken() {
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = await hashValue(rawToken);
@@ -467,5 +476,50 @@ export class AuthService {
     await this.redisService.blacklistToken(user.jti, ttlSeconds);
 
     return { success: true };
+  }
+
+  async issueNewJwt(data: AuthenticatedUser) {
+    const { userId, email, exp, jti } = data;
+
+    if (!exp) {
+      throw new UnauthorizedException('Invalid authentication token');
+    }
+
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    if (exp <= nowInSeconds) {
+      throw new UnauthorizedException('Authentication token has expired');
+    }
+
+    const user = await this.getUserById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isBlacklisted = await this.redisService.isTokenBlacklisted(jti);
+
+    if (isBlacklisted) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+
+    const ttlSeconds = exp - nowInSeconds;
+
+    try {
+      const payload = {
+        userId: user.id,
+        email: user.email,
+        jti: randomUUID(),
+      };
+
+      const token = await this.jwtService.signAsync(payload);
+      await this.redisService.blacklistToken(jti, ttlSeconds);
+
+      return {
+        token,
+      };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to refresh JWT for ${email}: ${msg}`);
+      throw new InternalServerErrorException('Token refresh failed');
+    }
   }
 }
