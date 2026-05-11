@@ -14,6 +14,9 @@ import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { MailModule } from './mail/mail.module';
 import { RedisModule } from './redis/redis.module';
+import { APP_GUARD } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -23,6 +26,23 @@ import { RedisModule } from './redis/redis.module';
       validationOptions: {
         abortEarly: false,
       },
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'default',
+            ttl: configService.getOrThrow<number>('THROTTLE_TTL_MS'),
+            limit: configService.getOrThrow<number>('THROTTLE_LIMIT'),
+          },
+          {
+            name: 'auth',
+            ttl: configService.getOrThrow<number>('AUTH_THROTTLE_TTL_MS'),
+            limit: configService.getOrThrow<number>('AUTH_THROTTLE_LIMIT'),
+          },
+        ],
+      }),
     }),
     DatabaseModule,
     UsersModule,
@@ -38,5 +58,11 @@ import { RedisModule } from './redis/redis.module';
     RedisModule,
   ],
   controllers: [AppController],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

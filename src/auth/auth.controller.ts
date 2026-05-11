@@ -14,6 +14,7 @@ import {
 } from '../common/responses/success-response';
 import { Public } from './decorators/public.decorator';
 import { Request } from 'express';
+import { AuthRateLimit } from '../common/rate-limit/decorators/auth-rate-limit.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -58,6 +59,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthRateLimit()
   @Post('resend-verification-email')
   async resendVerificationEmail(
     @Body() data: ResendVerificationEmailDto,
@@ -73,6 +75,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthRateLimit()
   @Post('login')
   async login(
     @Body() data: LoginDto,
@@ -83,6 +86,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthRateLimit()
   @Post('forgot-password')
   async forgotPassword(
     @Body() data: ForgotPasswordDto,
@@ -98,6 +102,7 @@ export class AuthController {
   }
 
   @Public()
+  @AuthRateLimit()
   @Post('reset-password')
   async resetPassword(
     @Body() data: ResetPasswordDto,
