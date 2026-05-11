@@ -5,11 +5,21 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
+import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { RedisService } from '../../redis/redis.service';
+import type { JwtPayload } from '../strategies/jwt.strategy';
+
+type AuthenticatedRequest = Request & {
+  user?: JwtPayload;
+};
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(private readonly reflector: Reflector) {
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly redisService: RedisService,
+  ) {
     super();
   }
 
@@ -19,6 +29,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     }
 
     const result = await super.canActivate(context);
+
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const user = request.user;
+    if (!user?.jti) {
+      throw new UnauthorizedException('Authentication required');
+    }
+
+    const isBlacklisted = await this.redisService.isTokenBlacklisted(user.jti);
+    if (isBlacklisted) {
+      throw new UnauthorizedException('Authentication token has been revoked');
+    }
+
     return !!result;
   }
 

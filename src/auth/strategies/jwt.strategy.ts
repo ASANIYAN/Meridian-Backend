@@ -14,10 +14,15 @@ export type JwtPayload = {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(configService: ConfigService) {
+    const algorithm = configService.getOrThrow<'HS256' | 'HS384' | 'HS512'>(
+      'JWT_ALGORITHM',
+    );
+
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
+      algorithms: [algorithm],
     });
   }
 

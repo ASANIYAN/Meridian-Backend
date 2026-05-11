@@ -9,11 +9,13 @@ import { APP_GUARD } from '@nestjs/core';
 import { PassportModule } from '@nestjs/passport';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [
     MailModule,
     PassportModule,
+    RedisModule,
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],
