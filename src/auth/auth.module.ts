@@ -10,12 +10,14 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RedisModule } from '../redis/redis.module';
+import { PasswordResetTokensModule } from '../password_reset_tokens/password_reset_tokens.module';
 
 @Module({
   imports: [
     MailModule,
     PassportModule,
     RedisModule,
+    PasswordResetTokensModule,
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],

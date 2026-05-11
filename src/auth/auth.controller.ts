@@ -1,8 +1,10 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
-import { AuthService } from './auth.service';
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
+import { AuthenticatedUser, AuthService } from './auth.service';
 import {
+  ForgotPasswordDto,
   LoginDto,
   RegisterDto,
+  ResetPasswordDto,
   ResendVerificationEmailDto,
   VerifyEmailDto,
 } from './dto/auth.dto';
@@ -11,6 +13,7 @@ import {
   type SuccessResponse,
 } from '../common/responses/success-response';
 import { Public } from './decorators/public.decorator';
+import { Request } from 'express';
 
 @Controller('auth')
 export class AuthController {
@@ -77,5 +80,37 @@ export class AuthController {
     const result = await this.authService.login(data);
 
     return buildSuccessResponse('Login successful.', result);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  async forgotPassword(
+    @Body() data: ForgotPasswordDto,
+  ): Promise<
+    SuccessResponse<Awaited<ReturnType<AuthService['forgotPassword']>>>
+  > {
+    const result = await this.authService.forgotPassword(data);
+
+    return buildSuccessResponse(
+      'If a verified account exists for that email, password reset instructions have been sent.',
+      result,
+    );
+  }
+
+  @Public()
+  @Post('reset-password')
+  async resetPassword(
+    @Body() data: ResetPasswordDto,
+  ): Promise<
+    SuccessResponse<Awaited<ReturnType<AuthService['resetPassword']>>>
+  > {
+    const result = await this.authService.resetPassword(data);
+
+    return buildSuccessResponse('Password reset successful.', result);
+  }
+
+  @Post('logout')
+  async logout(@Req() req: Request & { user: AuthenticatedUser }) {
+    return this.authService.logout(req.user);
   }
 }

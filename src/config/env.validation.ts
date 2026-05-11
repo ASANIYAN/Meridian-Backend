@@ -12,6 +12,11 @@ export const envValidationSchema = Joi.object({
   JWT_ALGORITHM: Joi.string().valid('HS256', 'HS384', 'HS512').required(),
   JWT_EXPIRY: Joi.string().trim().required(),
   JWT_REFRESH_EXPIRY: Joi.string().trim().required(),
+  PASSWORD_RESET_TOKEN_EXPIRY_HOURS: Joi.number()
+    .integer()
+    .positive()
+    .required(),
+  PASSWORD_RESET_MAX_ATTEMPTS: Joi.number().integer().positive().required(),
   EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS: Joi.number()
     .integer()
     .positive()

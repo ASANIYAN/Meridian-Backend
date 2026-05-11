@@ -15,8 +15,10 @@ import { ConfigService } from '@nestjs/config';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import {
+  ForgotPasswordDto,
   LoginDto,
   RegisterDto,
+  ResetPasswordDto,
   ResendVerificationEmailDto,
   VerifyEmailDto,
 } from './dto/auth.dto';
@@ -26,9 +28,11 @@ import {
   verifyPassword,
   verifyValue,
 } from '../common/security/password';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNull, ne } from 'drizzle-orm';
 import { JwtService } from '@nestjs/jwt';
 import { MailService } from '../mail/mail.service';
+import { RedisService } from '../redis/redis.service';
+import { PasswordResetTokensService } from '../password_reset_tokens/password_reset_tokens.service';
 
 type SignupResult = {
   user: typeof schema.users.$inferSelect;
@@ -43,6 +47,22 @@ type LoginResult = {
   token: string;
 };
 
+type ForgotPasswordResult = {
+  accepted: true;
+};
+
+type ResetPasswordResult = {
+  passwordReset: true;
+};
+
+export type AuthenticatedUser = {
+  userId: string;
+  email: string;
+  jti: string;
+  iat?: number;
+  exp?: number;
+};
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -51,6 +71,8 @@ export class AuthService {
     private readonly database: NodePgDatabase<typeof schema>,
     private jwtService: JwtService,
     private mailService: MailService,
+    private redisService: RedisService,
+    private passwordResetTokensService: PasswordResetTokensService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -93,6 +115,38 @@ export class AuthService {
 
   private queueVerificationEmail(email: string, token: string) {
     void this.sendVerificationEmail(email, token);
+  }
+
+  private async generatePasswordResetToken() {
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = await hashValue(rawToken);
+    const expiryHours = this.configService.getOrThrow<number>(
+      'PASSWORD_RESET_TOKEN_EXPIRY_HOURS',
+    );
+    const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
+
+    return {
+      rawToken,
+      tokenHash,
+      expiresAt,
+    };
+  }
+
+  private async sendPasswordResetEmail(email: string, token: string) {
+    try {
+      await this.mailService.sendPasswordResetEmail(email, token);
+      this.logger.log(`Successfully sent password reset email to ${email}`);
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Unable to send password reset email to ${email}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      return false;
+    }
+  }
+
+  private queuePasswordResetEmail(email: string, token: string) {
+    void this.sendPasswordResetEmail(email, token);
   }
 
   private isUniqueEmailViolation(error: unknown) {
@@ -297,5 +351,121 @@ export class AuthService {
       this.logger.error(`Failed to create login token for ${email}: ${msg}`);
       throw new InternalServerErrorException('Login failed');
     }
+  }
+
+  async forgotPassword(data: ForgotPasswordDto): Promise<ForgotPasswordResult> {
+    const { email } = data;
+    const user = await this.getUserByEmail(email);
+
+    if (!user || !user.verifiedAt) {
+      this.logger.log(
+        `Ignoring password reset request for ineligible account: ${email}`,
+      );
+      return { accepted: true };
+    }
+
+    try {
+      await this.passwordResetTokensService.revokeActiveTokensForUser(user.id);
+
+      const resetToken = await this.generatePasswordResetToken();
+      await this.passwordResetTokensService.createToken({
+        userId: user.id,
+        tokenHash: resetToken.tokenHash,
+        expiresAt: resetToken.expiresAt,
+      });
+
+      this.queuePasswordResetEmail(email, resetToken.rawToken);
+      return { accepted: true };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to create password reset for ${email}: ${msg}`);
+      throw new InternalServerErrorException(
+        'Failed to process password reset request',
+      );
+    }
+  }
+
+  async resetPassword(data: ResetPasswordDto): Promise<ResetPasswordResult> {
+    const { email, token, newPassword } = data;
+    const user = await this.getUserByEmail(email);
+
+    if (!user) {
+      throw new BadRequestException(
+        'Password reset token is invalid or expired',
+      );
+    }
+
+    const activeTokens =
+      await this.passwordResetTokensService.getActiveTokensByUserId(user.id);
+
+    let matchingToken: (typeof activeTokens)[number] | undefined;
+    for (const resetToken of activeTokens) {
+      const isMatch = await verifyValue(token, resetToken.tokenHash);
+      if (isMatch) {
+        matchingToken = resetToken;
+        break;
+      }
+    }
+
+    if (!matchingToken) {
+      throw new BadRequestException(
+        'Password reset token is invalid or expired',
+      );
+    }
+
+    try {
+      const hashedPassword = await hashPassword(newPassword);
+
+      await this.database.transaction(async (tx) => {
+        await tx
+          .update(schema.users)
+          .set({
+            passwordHash: hashedPassword,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.users.id, user.id));
+
+        await tx
+          .update(schema.passwordResetTokens)
+          .set({
+            consumedAt: new Date(),
+          })
+          .where(eq(schema.passwordResetTokens.id, matchingToken.id));
+
+        await tx
+          .update(schema.passwordResetTokens)
+          .set({
+            revokedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(schema.passwordResetTokens.userId, user.id),
+              ne(schema.passwordResetTokens.id, matchingToken.id),
+              isNull(schema.passwordResetTokens.consumedAt),
+              isNull(schema.passwordResetTokens.revokedAt),
+              gt(schema.passwordResetTokens.expiresAt, new Date()),
+            ),
+          );
+      });
+
+      return { passwordReset: true };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to reset password for ${email}: ${msg}`);
+      throw new InternalServerErrorException('Password reset failed');
+    }
+  }
+
+  async logout(user: AuthenticatedUser) {
+    if (!user.exp) {
+      throw new UnauthorizedException('Invalid authentication token');
+    }
+
+    const nowInSeconds = Math.floor(Date.now() / 1000);
+    const ttlSeconds = user.exp - nowInSeconds;
+
+    await this.redisService.blacklistToken(user.jti, ttlSeconds);
+
+    return { success: true };
   }
 }
