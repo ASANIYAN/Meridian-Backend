@@ -34,8 +34,13 @@ import { MailService } from '../mail/mail.service';
 import { RedisService } from '../redis/redis.service';
 import { PasswordResetTokensService } from '../password_reset_tokens/password_reset_tokens.service';
 
+type SafeUser = Omit<
+  typeof schema.users.$inferSelect,
+  'passwordHash' | 'verificationTokenHash' | 'verificationTokenExpiresAt'
+>;
+
 type SignupResult = {
-  user: typeof schema.users.$inferSelect;
+  user: SafeUser;
   verificationEmailQueued: true;
 };
 
@@ -158,6 +163,16 @@ export class AuthService {
     void this.sendPasswordResetEmail(email, token);
   }
 
+  private toSafeUser(user: typeof schema.users.$inferSelect): SafeUser {
+    const {
+      passwordHash: _p,
+      verificationTokenHash: _v,
+      verificationTokenExpiresAt: _e,
+      ...safeUser
+    } = user;
+    return safeUser;
+  }
+
   private isUniqueEmailViolation(error: unknown) {
     return (
       typeof error === 'object' &&
@@ -196,7 +211,7 @@ export class AuthService {
       this.queueVerificationEmail(email, verificationToken.rawToken);
 
       return {
-        user,
+        user: this.toSafeUser(user),
         verificationEmailQueued: true,
       };
     } catch (error) {
@@ -224,7 +239,7 @@ export class AuthService {
 
     if (user.verifiedAt) {
       return {
-        user,
+        user: this.toSafeUser(user),
         alreadyVerified: true,
       };
     }
@@ -257,7 +272,7 @@ export class AuthService {
       this.logger.log(`Verified email address for ${email}`);
 
       return {
-        user: verifiedUser,
+        user: this.toSafeUser(verifiedUser),
         alreadyVerified: false,
       };
     } catch (error) {

@@ -4,55 +4,36 @@ export class UsersListItemResponseDto {
   @ApiProperty({
     example: '9f9a0f7a-2ef4-4c35-9ae1-1a271e0ed2b1',
   })
-  id: string;
+  id!: string;
 
   @ApiProperty({
     example: 'jane@example.com',
   })
-  email: string;
+  email!: string;
 
   @ApiProperty({
     example: 'Jane',
   })
-  firstName: string;
+  firstName!: string;
 
   @ApiProperty({
     example: 'Doe',
   })
-  lastName: string;
-
-  @ApiProperty({
-    example: '$2b$12$examplePasswordHash',
-    description:
-      'Returned by the current implementation. Consider removing from public responses if not intended.',
-  })
-  passwordHash: string;
+  lastName!: string;
 
   @ApiProperty({
     example: '2026-05-11T12:00:00.000Z',
     nullable: true,
   })
-  verifiedAt: string | null;
-
-  @ApiProperty({
-    example: null,
-    nullable: true,
-  })
-  verificationTokenHash: string | null;
-
-  @ApiProperty({
-    example: null,
-    nullable: true,
-  })
-  verificationTokenExpiresAt: string | null;
+  verifiedAt!: string | null;
 
   @ApiProperty({
     example: '2026-05-11T11:55:00.000Z',
   })
-  createdAt: string;
+  createdAt!: string;
 
   @ApiProperty({
     example: '2026-05-11T12:00:00.000Z',
   })
-  updatedAt: string;
+  updatedAt!: string;
 }

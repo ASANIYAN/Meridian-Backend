@@ -10,6 +10,16 @@ export class UsersService {
     private readonly database: NodePgDatabase<typeof schema>,
   ) {}
   async getUsers() {
-    return this.database.query.users.findMany();
+    return this.database
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        verifiedAt: schema.users.verifiedAt,
+        createdAt: schema.users.createdAt,
+        updatedAt: schema.users.updatedAt,
+      })
+      .from(schema.users);
   }
 }

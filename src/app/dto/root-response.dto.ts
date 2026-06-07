@@ -4,20 +4,20 @@ export class RootResponseDto {
   @ApiProperty({
     example: 'ok',
   })
-  status: string;
+  status!: string;
 
   @ApiProperty({
     example: '2026-05-11T12:00:00.000Z',
   })
-  timestamp: string;
+  timestamp!: string;
 
   @ApiProperty({
     example: 'Meridian-Backend',
   })
-  service: string;
+  service!: string;
 
   @ApiProperty({
     example: 8000,
   })
-  port: number;
+  port!: number;
 }

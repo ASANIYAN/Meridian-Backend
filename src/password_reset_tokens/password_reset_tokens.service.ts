@@ -15,13 +15,8 @@ export class PasswordResetTokensService {
     userId: string;
     tokenHash: string;
     expiresAt: Date;
-  }) {
-    const [token] = await this.database
-      .insert(schema.passwordResetTokens)
-      .values(data)
-      .returning();
-
-    return token;
+  }): Promise<void> {
+    await this.database.insert(schema.passwordResetTokens).values(data);
   }
 
   async getActiveTokensByUserId(userId: string) {
