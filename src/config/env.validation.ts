@@ -2,12 +2,9 @@ import * as Joi from 'joi';
 
 export const envValidationSchema = Joi.object({
   DB_URL: Joi.string().trim().required(),
+  REDIS_URL: Joi.string().uri().required(),
   PORT: Joi.number().port().default(8000),
   APP_URL: Joi.string().uri().required(),
-  REDIS_HOST: Joi.string().hostname().required(),
-  REDIS_PORT: Joi.number().port().required(),
-  REDIS_PASSWORD: Joi.string().allow('').required(),
-  REDIS_TLS: Joi.boolean().required(),
   THROTTLE_TTL_MS: Joi.number().integer().positive().required(),
   THROTTLE_LIMIT: Joi.number().integer().positive().required(),
   AUTH_THROTTLE_TTL_MS: Joi.number().integer().positive().required(),
