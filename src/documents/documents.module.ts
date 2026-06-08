@@ -1,19 +1,15 @@
-import { MiddlewareConsumer, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { DocumentsService } from './documents.service';
 import { DocumentsController } from './documents.controller';
+import { MembershipsModule } from '../memberships/memberships.module';
 import {
   DocumentExistsGuard,
   DocumentMembershipGuard,
-} from './documents.middleware';
+} from './documents.guards';
 
 @Module({
-  providers: [DocumentsService],
+  imports: [MembershipsModule],
+  providers: [DocumentsService, DocumentExistsGuard, DocumentMembershipGuard],
   controllers: [DocumentsController],
 })
-export class DocumentsModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(DocumentExistsGuard, DocumentMembershipGuard)
-      .forRoutes('documents/*path');
-  }
-}
+export class DocumentsModule {}
