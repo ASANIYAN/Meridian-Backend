@@ -82,7 +82,6 @@ export class AuthController {
       'Account created successfully. You should receive a verification email shortly.',
       {
         user: result.user,
-        verificationEmailQueued: result.verificationEmailQueued,
       },
     );
   }

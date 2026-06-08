@@ -41,7 +41,6 @@ type SafeUser = Omit<
 
 type SignupResult = {
   user: SafeUser;
-  verificationEmailQueued: true;
 };
 
 type ResendVerificationEmailResult = {
@@ -212,7 +211,6 @@ export class AuthService {
 
       return {
         user: this.toSafeUser(user),
-        verificationEmailQueued: true,
       };
     } catch (error) {
       if (error instanceof ConflictException) {
