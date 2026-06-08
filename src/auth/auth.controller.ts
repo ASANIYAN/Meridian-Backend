@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Post, Req } from '@nestjs/common';
 import { AuthenticatedUser, AuthService } from './auth.service';
 import {
   ForgotPasswordDto,
@@ -18,10 +18,10 @@ import { AuthRateLimit } from '../common/rate-limit/decorators/auth-rate-limit.d
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
   ApiForbiddenResponse,
   ApiOperation,
-  ApiQuery,
   ApiTags,
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
@@ -87,22 +87,13 @@ export class AuthController {
   }
 
   @Public()
-  @Get('verify-email')
+  @Post('verify-email')
   @ApiOperation({
     summary: 'Verify email address',
     description:
       'Validates an email verification token and marks the account as verified.',
   })
-  @ApiQuery({
-    name: 'email',
-    required: true,
-    example: 'jane@example.com',
-  })
-  @ApiQuery({
-    name: 'token',
-    required: true,
-    example: '2d69f8d7c1234b7db5c4d2f413c2d0f76f7a3c7abf5f2c1d4e6a1b0c9d8e7f6',
-  })
+  @ApiBody({ type: VerifyEmailDto })
   @ApiSuccessResponseEnvelope({
     dataDto: VerifyEmailResponseDataDto,
     description: 'Email verification completed successfully.',
@@ -120,7 +111,7 @@ export class AuthController {
     description: 'Unused for this route.',
     schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
   })
-  async verifyEmail(@Query() data: VerifyEmailDto): Promise<
+  async verifyEmail(@Body() data: VerifyEmailDto): Promise<
     SuccessResponse<{
       user: Awaited<ReturnType<AuthService['verifyEmail']>>['user'];
       alreadyVerified: Awaited<
