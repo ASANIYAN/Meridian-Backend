@@ -20,7 +20,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           },
         },
         defaults: {
-          from: `"${config.getOrThrow<string>('EMAIL_FROM_NAME')}" <${config.getOrThrow<string>('EMAIL_FROM_ADDRESS')}>`,
+          from: config.getOrThrow<string>('SMTP_USER'),
         },
       }),
     }),

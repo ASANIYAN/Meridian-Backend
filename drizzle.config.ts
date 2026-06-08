@@ -1,13 +1,14 @@
-import { ConfigService } from '@nestjs/config';
 import { defineConfig } from 'drizzle-kit';
+import 'dotenv/config';
 
-const configService = new ConfigService();
+const { DB_URL } = process.env;
+if (!DB_URL) throw new Error('DB_URL environment variable is not set');
 
 export default defineConfig({
   schema: './src/database/schema.ts',
   out: './drizzle',
   dialect: 'postgresql',
   dbCredentials: {
-    url: configService.getOrThrow<string>('DB_URL'),
+    url: DB_URL,
   },
 });

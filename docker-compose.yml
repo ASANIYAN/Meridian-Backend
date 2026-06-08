@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: meridian
       POSTGRES_USER: meridian
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -14,7 +14,6 @@ services:
     image: redis:alpine
     ports:
       - '6379:6379'
-    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
 

@@ -11,9 +11,11 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { RedisModule } from '../redis/redis.module';
 import { PasswordResetTokensModule } from '../password_reset_tokens/password_reset_tokens.module';
+import { DatabaseModule } from '../database/database.module';
 
 @Module({
   imports: [
+    DatabaseModule,
     MailModule,
     PassportModule,
     RedisModule,
