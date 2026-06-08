@@ -6,9 +6,10 @@ import {
   DocumentExistsGuard,
   DocumentMembershipGuard,
 } from './documents.guards';
+import { DatabaseModule } from '../database/database.module';
 
 @Module({
-  imports: [MembershipsModule],
+  imports: [DatabaseModule, MembershipsModule],
   providers: [DocumentsService, DocumentExistsGuard, DocumentMembershipGuard],
   controllers: [DocumentsController],
 })
