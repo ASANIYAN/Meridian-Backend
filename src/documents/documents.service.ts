@@ -20,4 +20,22 @@ export class DocumentsService {
 
     return result[0];
   }
+
+  async createDocument(title: string, userId: string) {
+    return await this.database.transaction(async (tx) => {
+      const [document] = await tx
+        .insert(schema.documents)
+        .values({ title, createdBy: userId })
+        .returning();
+
+      await tx.insert(schema.memberships).values({
+        documentId: document.id,
+        userId,
+        role: 'author',
+        membershipMode: 'invite',
+      });
+
+      return document;
+    });
+  }
 }

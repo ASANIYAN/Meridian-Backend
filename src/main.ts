@@ -7,6 +7,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 async function bootstrap() {
   const logger = new Logger('Boot');
   const app = await NestFactory.create(AppModule);
+  app.setGlobalPrefix('v1');
   app.useGlobalPipes(new ValidationPipe());
 
   const swaggerConfig = new DocumentBuilder()
@@ -26,7 +27,7 @@ async function bootstrap() {
     )
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, swaggerDocument, {
+  SwaggerModule.setup('v1/docs', app, swaggerDocument, {
     swaggerOptions: {
       persistAuthorization: true,
     },
@@ -39,6 +40,6 @@ async function bootstrap() {
 
   logger.log('App Boot Successful');
   logger.log(`Listening on ${await app.getUrl()}`);
-  logger.log(`Swagger docs available at ${await app.getUrl()}/docs`);
+  logger.log(`Swagger docs available at ${await app.getUrl()}/v1/docs`);
 }
 void bootstrap();
