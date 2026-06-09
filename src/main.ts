@@ -27,7 +27,7 @@ async function bootstrap() {
     )
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('v1/docs', app, swaggerDocument, {
+  SwaggerModule.setup('docs', app, swaggerDocument, {
     swaggerOptions: {
       persistAuthorization: true,
     },
@@ -40,6 +40,6 @@ async function bootstrap() {
 
   logger.log('App Boot Successful');
   logger.log(`Listening on ${await app.getUrl()}`);
-  logger.log(`Swagger docs available at ${await app.getUrl()}/v1/docs`);
+  logger.log(`Swagger docs available at ${await app.getUrl()}/docs`);
 }
 void bootstrap();
