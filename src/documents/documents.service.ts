@@ -105,4 +105,14 @@ export class DocumentsService {
 
     return { ...documentRow, memberCount };
   }
+
+  async updateDocumentTitle(documentId: string, title: string) {
+    const [document] = await this.database
+      .update(schema.documents)
+      .set({ title, updatedAt: new Date() })
+      .where(eq(schema.documents.id, documentId))
+      .returning();
+
+    return document;
+  }
 }
