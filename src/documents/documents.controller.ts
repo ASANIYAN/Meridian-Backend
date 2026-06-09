@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
   Query,
   Req,
@@ -14,11 +15,14 @@ import {
   ApiOperation,
   ApiTags,
   ApiBadRequestResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { CreateDocumentResponseDataDto } from './dto/document-response.dto';
 import { ListDocumentsResponseDataDto } from './dto/list-documents-response.dto';
+import { GetDocumentResponseDataDto } from './dto/get-document-response.dto';
 import {
   buildSuccessResponse,
   SuccessResponse,
@@ -30,6 +34,10 @@ import type { Request } from 'express';
 import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import {
+  DocumentExistsGuard,
+  DocumentMembershipGuard,
+} from './documents.guards';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -76,6 +84,48 @@ export class DocumentsController {
       { documents: result.data },
       result.meta,
     );
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, DocumentExistsGuard, DocumentMembershipGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get document',
+    description:
+      'Returns metadata for a single document the requesting user is a member of, including their role and the total member count.',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: GetDocumentResponseDataDto,
+    description: 'Document retrieved successfully.',
+    messageExample: 'Document retrieved successfully.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user has no membership on this document.',
+    schema: errorResponseSchema(
+      403,
+      'User is not a member of this document',
+      'Forbidden',
+    ),
+  })
+  async getDocument(
+    @Param('id') documentId: string,
+    @Req() request: Request & { membershipRole: string },
+  ) {
+    const result =
+      await this.documentService.getDocumentWithMemberCount(documentId);
+    const mergedResult = { ...result, role: request.membershipRole };
+
+    return buildSuccessResponse('Document retrieved successfully.', {
+      document: mergedResult,
+    });
   }
 
   @Post()

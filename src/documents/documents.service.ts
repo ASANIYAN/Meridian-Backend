@@ -92,4 +92,17 @@ export class DocumentsService {
 
     return { data: documentWithRole, meta: { page, limit, total, totalPages } };
   }
+
+  async getDocumentWithMemberCount(documentId: string) {
+    const documentRow = await this.getDocumentById(documentId);
+
+    const result = await this.database
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.memberships)
+      .where(eq(schema.memberships.documentId, documentId));
+
+    const memberCount = Number(result[0].count);
+
+    return { ...documentRow, memberCount };
+  }
 }
