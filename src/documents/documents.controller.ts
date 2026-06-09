@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -39,6 +40,7 @@ import type { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
+  DocumentAuthorGuard,
   DocumentExistsGuard,
   DocumentMembershipGuard,
   DocumentWriteAccessGuard,
@@ -136,6 +138,7 @@ export class DocumentsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({
     summary: 'Create a document',
@@ -228,5 +231,35 @@ export class DocumentsController {
     return buildSuccessResponse('Document updated successfully.', {
       document: updatedDocument,
     });
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Delete document',
+    description:
+      'Soft-deletes a document by setting its status to deleted. Only the document author may delete — editors and viewers receive 403. The row is preserved in the database; all memberships, operations, and snapshots remain intact.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has already been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async deleteDocument(@Param('id') documentId: string): Promise<void> {
+    await this.documentService.softDeleteDocument(documentId);
   }
 }
