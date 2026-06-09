@@ -87,3 +87,22 @@ export class DocumentWriteAccessGuard implements CanActivate {
     return true;
   }
 }
+
+@Injectable()
+export class DocumentAuthorGuard implements CanActivate {
+  private readonly logger = new Logger(DocumentAuthorGuard.name);
+
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<DocumentRequest>();
+    const role = request.membershipRole;
+
+    if (role !== 'author') {
+      this.logger.log(
+        `Insufficient permission for user ${request.user?.userId} with role: ${role}`,
+      );
+      throw new ForbiddenException('Insufficient permissions');
+    }
+
+    return true;
+  }
+}

@@ -115,4 +115,11 @@ export class DocumentsService {
 
     return document;
   }
+
+  async softDeleteDocument(documentId: string) {
+    await this.database
+      .update(schema.documents)
+      .set({ status: 'deleted', updatedAt: new Date() })
+      .where(eq(schema.documents.id, documentId));
+  }
 }

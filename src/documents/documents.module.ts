@@ -3,6 +3,7 @@ import { DocumentsService } from './documents.service';
 import { DocumentsController } from './documents.controller';
 import { MembershipsModule } from '../memberships/memberships.module';
 import {
+  DocumentAuthorGuard,
   DocumentExistsGuard,
   DocumentMembershipGuard,
   DocumentWriteAccessGuard,
@@ -17,6 +18,7 @@ import { RedisService } from '../redis/redis.service';
     DocumentExistsGuard,
     DocumentMembershipGuard,
     DocumentWriteAccessGuard,
+    DocumentAuthorGuard,
     RedisService,
   ],
   controllers: [DocumentsController],
