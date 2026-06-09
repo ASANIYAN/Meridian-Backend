@@ -122,4 +122,17 @@ export class DocumentsService {
       .set({ status: 'deleted', updatedAt: new Date() })
       .where(eq(schema.documents.id, documentId));
   }
+
+  async updateDocumentStatus(
+    documentId: string,
+    status: 'active' | 'inactive',
+  ) {
+    const [document] = await this.database
+      .update(schema.documents)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(schema.documents.id, documentId))
+      .returning();
+
+    return document;
+  }
 }
