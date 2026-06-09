@@ -22,7 +22,9 @@ class AtLeastOneFieldConstraint implements ValidatorConstraintInterface {
 }
 
 function AtLeastOneField() {
-  return function (constructor: object) {
+  return function <T extends new (...args: unknown[]) => unknown>(
+    constructor: T,
+  ) {
     registerDecorator({
       name: 'atLeastOneField',
       target: constructor,
