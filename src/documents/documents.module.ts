@@ -6,10 +6,17 @@ import {
   DocumentExistsGuard,
   DocumentMembershipGuard,
 } from './documents.guards';
+import { DatabaseModule } from '../database/database.module';
+import { RedisService } from '../redis/redis.service';
 
 @Module({
-  imports: [MembershipsModule],
-  providers: [DocumentsService, DocumentExistsGuard, DocumentMembershipGuard],
+  imports: [DatabaseModule, MembershipsModule],
+  providers: [
+    DocumentsService,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    RedisService,
+  ],
   controllers: [DocumentsController],
 })
 export class DocumentsModule {}
