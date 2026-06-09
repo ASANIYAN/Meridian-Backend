@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { documentStatusEnum } from '../schema';
 
 export class DocumentRecordResponseDto {
   @ApiProperty({ example: '3fa85f64-5717-4562-b3fc-2c963f66afa6' })
@@ -8,10 +9,10 @@ export class DocumentRecordResponseDto {
   title!: string;
 
   @ApiProperty({
-    enum: ['draft', 'active', 'inactive', 'deleted'],
+    enum: documentStatusEnum.enumValues,
     example: 'draft',
   })
-  status!: string;
+  status!: (typeof documentStatusEnum.enumValues)[number];
 
   @ApiProperty({ example: '9f9a0f7a-2ef4-4c35-9ae1-1a271e0ed2b1' })
   createdBy!: string;

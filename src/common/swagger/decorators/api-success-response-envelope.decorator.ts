@@ -1,5 +1,9 @@
 import { applyDecorators, Type } from '@nestjs/common';
 import { ApiExtraModels, ApiResponse, getSchemaPath } from '@nestjs/swagger';
+import type {
+  SchemaObject,
+  ReferenceObject,
+} from '@nestjs/swagger/dist/interfaces/open-api-spec.interface';
 
 type ApiSuccessResponseEnvelopeOptions = {
   dataDto: Type<unknown>;
@@ -7,6 +11,7 @@ type ApiSuccessResponseEnvelopeOptions = {
   messageExample: string;
   status?: number;
   isArray?: boolean;
+  meta?: Record<string, SchemaObject | ReferenceObject>;
 };
 
 export function ApiSuccessResponseEnvelope(
@@ -39,6 +44,14 @@ export function ApiSuccessResponseEnvelope(
             : {
                 $ref: getSchemaPath(options.dataDto),
               },
+          ...(options.meta
+            ? {
+                meta: {
+                  type: 'object',
+                  properties: options.meta,
+                },
+              }
+            : {}),
         },
       },
     }),
