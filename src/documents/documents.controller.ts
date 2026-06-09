@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -20,7 +21,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { CreateDocumentDto } from './dto/create-document.dto';
-import { CreateDocumentResponseDataDto } from './dto/document-response.dto';
+import {
+  CreateDocumentResponseDataDto,
+  UpdateDocumentResponseDataDto,
+} from './dto/document-response.dto';
 import { ListDocumentsResponseDataDto } from './dto/list-documents-response.dto';
 import { GetDocumentResponseDataDto } from './dto/get-document-response.dto';
 import {
@@ -37,7 +41,9 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import {
   DocumentExistsGuard,
   DocumentMembershipGuard,
+  DocumentWriteAccessGuard,
 } from './documents.guards';
+import { UpdateDocumentDto } from './dto/update-document.dto';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -168,5 +174,59 @@ export class DocumentsController {
     );
 
     return buildSuccessResponse('Document created successfully.', { document });
+  }
+
+  @Patch(':id')
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentWriteAccessGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Update document',
+    description:
+      'Updates the title of a document. Only authors and editors may update — viewers receive 403. Content changes go through WebSocket, not this endpoint.',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: UpdateDocumentResponseDataDto,
+    description: 'Document updated successfully.',
+    messageExample: 'Document updated successfully.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Validation failed — body is empty, title is an empty string, or title is not a string.',
+    schema: errorResponseSchema(
+      400,
+      ['At least one field must be provided', 'title should not be empty'],
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description:
+      'User has no membership on this document, or is a member with viewer role.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async updateDocument(
+    @Param('id') documentId: string,
+    @Body() body: UpdateDocumentDto,
+  ) {
+    const updatedDocument = await this.documentService.updateDocumentTitle(
+      documentId,
+      body.title!,
+    );
+
+    return buildSuccessResponse('Document updated successfully.', {
+      document: updatedDocument,
+    });
   }
 }

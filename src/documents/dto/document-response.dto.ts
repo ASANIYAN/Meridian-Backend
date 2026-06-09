@@ -31,3 +31,8 @@ export class CreateDocumentResponseDataDto {
   @ApiProperty({ type: DocumentRecordResponseDto })
   document!: DocumentRecordResponseDto;
 }
+
+export class UpdateDocumentResponseDataDto {
+  @ApiProperty({ type: DocumentRecordResponseDto })
+  document!: DocumentRecordResponseDto;
+}
