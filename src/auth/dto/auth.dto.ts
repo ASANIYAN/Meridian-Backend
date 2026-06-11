@@ -12,7 +12,7 @@ export class RegisterDto {
     example: 'jane@example.com',
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
+  email!: string;
 
   @ApiProperty({
     example: 'Password123!',
@@ -22,19 +22,19 @@ export class RegisterDto {
   @IsStrongPassword()
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
   @MaxLength(32, { message: 'Password cannot exceed 32 characters' })
-  password: string;
+  password!: string;
 
   @ApiProperty({
     example: 'Jane',
   })
   @IsString()
-  firstName: string;
+  firstName!: string;
 
   @ApiProperty({
     example: 'Doe',
   })
   @IsString()
-  lastName: string;
+  lastName!: string;
 }
 
 export class VerifyEmailDto {
@@ -42,13 +42,13 @@ export class VerifyEmailDto {
     example: 'jane@example.com',
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
+  email!: string;
 
   @ApiProperty({
     example: '2d69f8d7c1234b7db5c4d2f413c2d0f76f7a3c7abf5f2c1d4e6a1b0c9d8e7f6',
   })
   @IsString()
-  token: string;
+  token!: string;
 }
 
 export class ResendVerificationEmailDto {
@@ -56,7 +56,7 @@ export class ResendVerificationEmailDto {
     example: 'jane@example.com',
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
+  email!: string;
 }
 
 export class LoginDto {
@@ -64,13 +64,13 @@ export class LoginDto {
     example: 'jane@example.com',
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
+  email!: string;
 
   @ApiProperty({
     example: 'Password123!',
   })
   @IsString()
-  password: string;
+  password!: string;
 }
 
 export class ForgotPasswordDto {
@@ -78,7 +78,7 @@ export class ForgotPasswordDto {
     example: 'jane@example.com',
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
+  email!: string;
 }
 
 export class ResetPasswordDto {
@@ -86,13 +86,13 @@ export class ResetPasswordDto {
     example: 'jane@example.com',
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
-  email: string;
+  email!: string;
 
   @ApiProperty({
     example: '2d69f8d7c1234b7db5c4d2f413c2d0f76f7a3c7abf5f2c1d4e6a1b0c9d8e7f6',
   })
   @IsString()
-  token: string;
+  token!: string;
 
   @ApiProperty({
     example: 'Password123!',
@@ -102,5 +102,5 @@ export class ResetPasswordDto {
   @IsStrongPassword()
   @MinLength(8, { message: 'Password must be at least 8 characters long' })
   @MaxLength(32, { message: 'Password cannot exceed 32 characters' })
-  newPassword: string;
+  newPassword!: string;
 }

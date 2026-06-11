@@ -164,7 +164,7 @@ export class DocumentsService {
     email: string,
     role: 'editor' | 'viewer',
   ) {
-    return this.membershipsService.addMember(documentId, email, role);
+    return await this.membershipsService.addMember(documentId, email, role);
   }
 
   async updateDocumentMemberRole(
