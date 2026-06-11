@@ -1,9 +1,15 @@
 import * as schema from '../database/schema';
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { ConfigService } from '@nestjs/config';
 import { CreateShareLinkDto } from './dto/create-share-link.dto';
+import { and, eq, isNull } from 'drizzle-orm';
 
 @Injectable()
 export class ShareLinksService {
@@ -39,5 +45,33 @@ export class ShareLinksService {
     const url = `${appUrl}/join/${result.token}`;
 
     return { ...result, url };
+  }
+
+  async revokeShareLink(documentId: string, token: string) {
+    const where = and(
+      eq(schema.shareLinks.token, token),
+      eq(schema.shareLinks.documentId, documentId),
+    );
+
+    const [updatedLink] = await this.database
+      .update(schema.shareLinks)
+      .set({ revokedAt: new Date() })
+      .where(and(where, isNull(schema.shareLinks.revokedAt)))
+      .returning();
+
+    if (updatedLink) {
+      return updatedLink;
+    }
+
+    const [existing] = await this.database
+      .select()
+      .from(schema.shareLinks)
+      .where(where);
+
+    if (!existing) {
+      throw new NotFoundException('Link is not found');
+    }
+
+    throw new BadRequestException('Link is already revoked.');
   }
 }

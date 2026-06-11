@@ -55,6 +55,7 @@ import { UpdateDocumentMemberRole } from './dto/update-document-member-role.dto'
 import { UpdateDocumentMemberRoleResponse } from './dto/update-document-member-role-response.dto';
 import { CreateShareLinkDto } from '../share_links/dto/create-share-link.dto';
 import { CreateShareLinkResponseDataDto } from '../share_links/dto/create-share-link-response.dto';
+import { RevokeShareLinkResponseDataDto } from '../share_links/dto/revoke-share-link-response.dto';
 import { ShareLinksService } from '../share_links/share_links.service';
 
 @ApiTags('Documents')
@@ -344,6 +345,52 @@ export class DocumentsController {
     );
 
     return buildSuccessResponse('Link created successfully.', { link });
+  }
+
+  @Patch(':id/links/:token')
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Revoke share link',
+    description:
+      'Revokes a share link so it can no longer be used to join the document. Only the document author may revoke links. Members who already joined via this link are unaffected.',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: RevokeShareLinkResponseDataDto,
+    description: 'Share link revoked successfully.',
+    messageExample: 'Link revoked successfully.',
+  })
+  @ApiBadRequestResponse({
+    description: 'Link has already been revoked.',
+    schema: errorResponseSchema(400, 'Link is already revoked.', 'Bad Request'),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or share link token not found.',
+    schema: errorResponseSchema(404, 'Link is not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async revokeLink(
+    @Param('id') documentId: string,
+    @Param('token') token: string,
+  ) {
+    const link = await this.sharelinksService.revokeShareLink(
+      documentId,
+      token,
+    );
+
+    return buildSuccessResponse('Link revoked successfully.', { link });
   }
 
   @Patch(':id/members/:userId')
