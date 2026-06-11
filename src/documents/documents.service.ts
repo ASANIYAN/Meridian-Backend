@@ -122,4 +122,32 @@ export class DocumentsService {
       .set({ status: 'deleted', updatedAt: new Date() })
       .where(eq(schema.documents.id, documentId));
   }
+
+  async updateDocumentStatus(
+    documentId: string,
+    status: 'active' | 'inactive',
+  ) {
+    const [document] = await this.database
+      .update(schema.documents)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(schema.documents.id, documentId))
+      .returning();
+
+    return document;
+  }
+
+  async getDocumentMembers(documentId: string) {
+    return this.database
+      .select({
+        id: schema.users.id,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        role: schema.memberships.role,
+        membershipMode: schema.memberships.membershipMode,
+        createdAt: schema.memberships.createdAt,
+      })
+      .from(schema.memberships)
+      .innerJoin(schema.users, eq(schema.memberships.userId, schema.users.id))
+      .where(eq(schema.memberships.documentId, documentId));
+  }
 }

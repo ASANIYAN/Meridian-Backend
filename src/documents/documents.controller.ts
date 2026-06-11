@@ -28,6 +28,7 @@ import {
 } from './dto/document-response.dto';
 import { ListDocumentsResponseDataDto } from './dto/list-documents-response.dto';
 import { GetDocumentResponseDataDto } from './dto/get-document-response.dto';
+import { GetDocumentMembersResponseDataDto } from './dto/get-document-members-response.dto';
 import {
   buildSuccessResponse,
   SuccessResponse,
@@ -46,6 +47,7 @@ import {
   DocumentWriteAccessGuard,
 } from './documents.guards';
 import { UpdateDocumentDto } from './dto/update-document.dto';
+import { UpdateDocumentStatusDto } from './dto/update-document-status.dto';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -136,6 +138,43 @@ export class DocumentsController {
     });
   }
 
+  @Get(':id/members')
+  @UseGuards(JwtAuthGuard, DocumentExistsGuard, DocumentMembershipGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List document members',
+    description:
+      'Returns all members of a document with their role and how they joined. Accessible to all membership roles (author, editor, viewer).',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: GetDocumentMembersResponseDataDto,
+    description: 'Document members retrieved successfully.',
+    messageExample: 'Document members retrieved successfully.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user has no membership on this document.',
+    schema: errorResponseSchema(
+      403,
+      'User is not a member of this document',
+      'Forbidden',
+    ),
+  })
+  async listMembers(@Param('id') documentId: string) {
+    const members = await this.documentService.getDocumentMembers(documentId);
+
+    return buildSuccessResponse('Document members retrieved successfully.', {
+      members,
+    });
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard)
@@ -177,6 +216,59 @@ export class DocumentsController {
     );
 
     return buildSuccessResponse('Document created successfully.', { document });
+  }
+
+  @Patch(':id/status')
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Update document status',
+    description:
+      'Updates the status of a document to active or inactive. Only the document author may change status — editors and viewers receive 403. Setting status to deleted or draft via this endpoint is not permitted.',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: UpdateDocumentResponseDataDto,
+    description: 'Document status updated successfully.',
+    messageExample: 'Document status updated successfully.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Validation failed — status is missing, not a string, or not one of: active, inactive.',
+    schema: errorResponseSchema(
+      400,
+      ['status must be one of the following values: active, inactive'],
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async updateDocumentStatus(
+    @Param('id') documentId: string,
+    @Body() body: UpdateDocumentStatusDto,
+  ) {
+    const updatedDocument = await this.documentService.updateDocumentStatus(
+      documentId,
+      body.status,
+    );
+
+    return buildSuccessResponse('Document status updated successfully.', {
+      document: updatedDocument,
+    });
   }
 
   @Patch(':id')
