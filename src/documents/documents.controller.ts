@@ -57,6 +57,7 @@ import { CreateShareLinkDto } from '../share_links/dto/create-share-link.dto';
 import { CreateShareLinkResponseDataDto } from '../share_links/dto/create-share-link-response.dto';
 import { RevokeShareLinkResponseDataDto } from '../share_links/dto/revoke-share-link-response.dto';
 import { ShareLinksService } from '../share_links/share_links.service';
+import { ClaimShareLinkResponseDataDto } from './dto/claim-share-link-response.dto';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -185,6 +186,29 @@ export class DocumentsController {
     return buildSuccessResponse('Document members retrieved successfully.', {
       members,
     });
+  }
+
+  @Post(':id/links/:token/validate')
+  @UseGuards(JwtAuthGuard, DocumentExistsGuard) // ← NO DocumentMembershipGuard
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Claim a share link' })
+  @ApiSuccessResponseEnvelope(ClaimShareLinkResponseDataDto, { status: 200 })
+  @ApiForbiddenResponse({ description: 'Revoked / expired / already claimed' })
+  @ApiConflictResponse({ description: 'User is already a member' })
+  @ApiNotFoundResponse({ description: 'Share link not found' })
+  async claimShareLink(
+    @Param('id') documentId: string,
+    @Param('token') token: string,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    const userId = request.user.userId;
+    const data = await this.documentService.claimShareLink(
+      documentId,
+      token,
+      userId,
+    );
+    return buildSuccessResponse('Share link claimed successfully', data);
   }
 
   @Post(':id/members')
