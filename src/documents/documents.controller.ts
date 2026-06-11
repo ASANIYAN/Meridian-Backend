@@ -17,6 +17,7 @@ import {
   ApiOperation,
   ApiTags,
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiUnauthorizedResponse,
@@ -48,6 +49,8 @@ import {
 } from './documents.guards';
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { UpdateDocumentStatusDto } from './dto/update-document-status.dto';
+import { AddDocumentMemberDto } from './dto/add-document-member.dto';
+import { AddDocumentMemberResponseDataDto } from './dto/add-document-member-response.dto';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -173,6 +176,69 @@ export class DocumentsController {
     return buildSuccessResponse('Document members retrieved successfully.', {
       members,
     });
+  }
+
+  @Post(':id/members')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Add document member',
+    description:
+      'Adds a user to a document by email with editor or viewer role. Only the document author may add members. The membership is created with mode invite.',
+  })
+  @ApiSuccessResponseEnvelope({
+    status: 201,
+    dataDto: AddDocumentMemberResponseDataDto,
+    description: 'Member added successfully.',
+    messageExample: 'Member added successfully.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Validation failed — email is invalid or role is not editor or viewer.',
+    schema: errorResponseSchema(
+      400,
+      ['role must be one of the following values: editor, viewer'],
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description:
+      'Document does not exist, has been deleted, or email does not match any user.',
+    schema: errorResponseSchema(404, 'User not found.', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  @ApiConflictResponse({
+    description: 'The user is already a member of this document.',
+    schema: errorResponseSchema(
+      409,
+      'User is already a member of this document.',
+      'Conflict',
+    ),
+  })
+  async addMember(
+    @Param('id') documentId: string,
+    @Body() body: AddDocumentMemberDto,
+  ) {
+    const member = await this.documentService.addDocumentMember(
+      documentId,
+      body.email,
+      body.role,
+    );
+
+    return buildSuccessResponse('Member added successfully.', { member });
   }
 
   @Post()

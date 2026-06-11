@@ -3,6 +3,7 @@ import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { and, desc, eq, getTableColumns, ne, sql } from 'drizzle-orm';
+import { MembershipsService } from '../memberships/memberships.service';
 
 type DocumentWithRole = typeof schema.documents.$inferSelect & {
   role: (typeof schema.membershipRoleEnum.enumValues)[number];
@@ -19,6 +20,7 @@ export class DocumentsService {
   constructor(
     @Inject(DATABASE_CONNECTION)
     private readonly database: NodePgDatabase<typeof schema>,
+    private readonly membershipsService: MembershipsService,
   ) {}
 
   async getDocumentById(id: string) {
@@ -149,5 +151,13 @@ export class DocumentsService {
       .from(schema.memberships)
       .innerJoin(schema.users, eq(schema.memberships.userId, schema.users.id))
       .where(eq(schema.memberships.documentId, documentId));
+  }
+
+  async addDocumentMember(
+    documentId: string,
+    email: string,
+    role: 'editor' | 'viewer',
+  ) {
+    return this.membershipsService.addMember(documentId, email, role);
   }
 }
