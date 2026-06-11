@@ -193,7 +193,12 @@ export class DocumentsController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Claim a share link' })
-  @ApiSuccessResponseEnvelope(ClaimShareLinkResponseDataDto, { status: 200 })
+  @ApiSuccessResponseEnvelope({
+    dataDto: ClaimShareLinkResponseDataDto,
+    status: 200,
+    description: 'Share link claimed successfully.',
+    messageExample: 'Share link claimed successfully.',
+  })
   @ApiForbiddenResponse({ description: 'Revoked / expired / already claimed' })
   @ApiConflictResponse({ description: 'User is already a member' })
   @ApiNotFoundResponse({ description: 'Share link not found' })
