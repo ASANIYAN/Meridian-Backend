@@ -51,6 +51,8 @@ import { UpdateDocumentDto } from './dto/update-document.dto';
 import { UpdateDocumentStatusDto } from './dto/update-document-status.dto';
 import { AddDocumentMemberDto } from './dto/add-document-member.dto';
 import { AddDocumentMemberResponseDataDto } from './dto/add-document-member-response.dto';
+import { UpdateDocumentMemberRole } from './dto/update-document-member-role.dto';
+import { UpdateDocumentMemberRoleResponse } from './dto/update-document-member-role-response.dto';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -282,6 +284,64 @@ export class DocumentsController {
     );
 
     return buildSuccessResponse('Document created successfully.', { document });
+  }
+
+  @Patch(':id/members/:userId')
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Update member role',
+    description:
+      'Changes the role of a document member to editor or viewer. Only the document author may change roles. The author role cannot be changed, and the author cannot change their own role.',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: UpdateDocumentMemberRoleResponse,
+    description: 'Member role updated successfully.',
+    messageExample: 'Member role updated successfully.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'Role is not editor or viewer, target user is the document author, or author is attempting to change their own role.',
+    schema: errorResponseSchema(
+      400,
+      ['role must be one of the following values: editor, viewer'],
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description:
+      'Document does not exist, has been deleted, or target user is not a member.',
+    schema: errorResponseSchema(404, 'Member not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async updateDocumentMemberRole(
+    @Param('id') documentId: string,
+    @Param('userId') targetUserId: string,
+    @Body() body: UpdateDocumentMemberRole,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    const updatedMember = await this.documentService.updateDocumentMemberRole(
+      documentId,
+      targetUserId,
+      request.user.userId,
+      body.role,
+    );
+
+    return buildSuccessResponse('Member role updated successfully.', {
+      member: updatedMember,
+    });
   }
 
   @Patch(':id/status')

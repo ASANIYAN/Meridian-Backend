@@ -1,6 +1,12 @@
 import * as schema from '../database/schema';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { and, desc, eq, getTableColumns, ne, sql } from 'drizzle-orm';
 import { MembershipsService } from '../memberships/memberships.service';
@@ -159,5 +165,40 @@ export class DocumentsService {
     role: 'editor' | 'viewer',
   ) {
     return this.membershipsService.addMember(documentId, email, role);
+  }
+
+  async updateDocumentMemberRole(
+    documentId: string,
+    targetUserId: string,
+    callerUserId: string,
+    role: 'editor' | 'viewer',
+  ) {
+    const targetMembership =
+      await this.membershipsService.getUserDocumentMembership(
+        documentId,
+        targetUserId,
+      );
+
+    if (!targetMembership) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (targetMembership.role === 'author') {
+      throw new BadRequestException(
+        'Cannot change the role of the document author.',
+      );
+    }
+
+    if (targetUserId === callerUserId) {
+      throw new BadRequestException('Cannot change your own role');
+    }
+
+    const updatedMembership = await this.membershipsService.updateMemberRole(
+      documentId,
+      targetUserId,
+      role,
+    );
+
+    return updatedMembership;
   }
 }

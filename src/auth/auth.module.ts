@@ -12,10 +12,12 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { RedisModule } from '../redis/redis.module';
 import { PasswordResetTokensModule } from '../password_reset_tokens/password_reset_tokens.module';
 import { DatabaseModule } from '../database/database.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     DatabaseModule,
+    UsersModule,
     MailModule,
     PassportModule,
     RedisModule,

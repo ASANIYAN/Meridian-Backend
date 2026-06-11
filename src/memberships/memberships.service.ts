@@ -3,12 +3,14 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { and, eq } from 'drizzle-orm';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class MembershipsService {
@@ -16,6 +18,7 @@ export class MembershipsService {
   constructor(
     @Inject(DATABASE_CONNECTION)
     private readonly database: NodePgDatabase<typeof schema>,
+    private readonly usersService: UsersService,
   ) {}
 
   async getUserDocumentMembership(documentId: string, userId: string) {
@@ -37,35 +40,59 @@ export class MembershipsService {
     email: string,
     role: 'editor' | 'viewer',
   ) {
-    const [user] = await this.database
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.email, email));
+    const user = await this.usersService.getUserByEmail(email);
 
     if (!user) {
       throw new NotFoundException('User not found.');
     }
 
-    const [existing] = await this.database
-      .select()
-      .from(schema.memberships)
-      .where(
-        and(
-          eq(schema.memberships.documentId, documentId),
-          eq(schema.memberships.userId, user.id),
-        ),
-      );
-
-    if (existing) {
-      throw new ConflictException('User is already a member of this document.');
-    }
-
     const [membership] = await this.database
       .insert(schema.memberships)
       .values({ documentId, userId: user.id, role, membershipMode: 'invite' })
+      .onConflictDoNothing()
       .returning();
 
+    if (!membership) {
+      throw new ConflictException('User is already a member of this document.');
+    }
+
     this.logger.log(`Added member ${user.id} to document ${documentId}`);
+
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: membership.role,
+      membershipMode: membership.membershipMode,
+      createdAt: membership.createdAt,
+    };
+  }
+
+  async updateMemberRole(
+    documentId: string,
+    userId: string,
+    role: 'editor' | 'viewer',
+  ) {
+    const user = await this.usersService.getUserById(userId);
+
+    if (!user) {
+      throw new NotFoundException('User not found.');
+    }
+
+    const [membership] = await this.database
+      .update(schema.memberships)
+      .set({ role, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.memberships.documentId, documentId),
+          eq(schema.memberships.userId, userId),
+        ),
+      )
+      .returning();
+
+    if (!membership) {
+      throw new InternalServerErrorException('Failed to update member role.');
+    }
 
     return {
       id: user.id,
