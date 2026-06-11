@@ -214,7 +214,7 @@ export class AuthService {
   async verifyEmail(data: VerifyEmailDto) {
     const { email, token } = data;
 
-    const user = await this.usersService.getUserByEmail(email);
+    const user = await this.usersService.getUserCredentialsByEmail(email);
     if (!user) {
       throw new NotFoundException('Account not found');
     }
@@ -312,7 +312,8 @@ export class AuthService {
 
   async login(data: LoginDto): Promise<LoginResult> {
     const { email, password } = data;
-    const existingUser = await this.usersService.getUserByEmail(email);
+    const existingUser =
+      await this.usersService.getUserCredentialsByEmail(email);
 
     if (!existingUser) {
       throw new UnauthorizedException('Invalid email or password');
