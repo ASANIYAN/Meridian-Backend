@@ -28,6 +28,7 @@ import {
 } from './dto/document-response.dto';
 import { ListDocumentsResponseDataDto } from './dto/list-documents-response.dto';
 import { GetDocumentResponseDataDto } from './dto/get-document-response.dto';
+import { GetDocumentMembersResponseDataDto } from './dto/get-document-members-response.dto';
 import {
   buildSuccessResponse,
   SuccessResponse,
@@ -134,6 +135,43 @@ export class DocumentsController {
 
     return buildSuccessResponse('Document retrieved successfully.', {
       document: mergedResult,
+    });
+  }
+
+  @Get(':id/members')
+  @UseGuards(JwtAuthGuard, DocumentExistsGuard, DocumentMembershipGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'List document members',
+    description:
+      'Returns all members of a document with their role and how they joined. Accessible to all membership roles (author, editor, viewer).',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: GetDocumentMembersResponseDataDto,
+    description: 'Document members retrieved successfully.',
+    messageExample: 'Document members retrieved successfully.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user has no membership on this document.',
+    schema: errorResponseSchema(
+      403,
+      'User is not a member of this document',
+      'Forbidden',
+    ),
+  })
+  async listMembers(@Param('id') documentId: string) {
+    const members = await this.documentService.getDocumentMembers(documentId);
+
+    return buildSuccessResponse('Document members retrieved successfully.', {
+      members,
     });
   }
 

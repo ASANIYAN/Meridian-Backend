@@ -135,4 +135,19 @@ export class DocumentsService {
 
     return document;
   }
+
+  async getDocumentMembers(documentId: string) {
+    return this.database
+      .select({
+        id: schema.users.id,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        role: schema.memberships.role,
+        membershipMode: schema.memberships.membershipMode,
+        createdAt: schema.memberships.createdAt,
+      })
+      .from(schema.memberships)
+      .innerJoin(schema.users, eq(schema.memberships.userId, schema.users.id))
+      .where(eq(schema.memberships.documentId, documentId));
+  }
 }
