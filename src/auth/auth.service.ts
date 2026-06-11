@@ -33,6 +33,7 @@ import { JwtService } from '@nestjs/jwt';
 import { MailService } from '../mail/mail.service';
 import { RedisService } from '../redis/redis.service';
 import { PasswordResetTokensService } from '../password_reset_tokens/password_reset_tokens.service';
+import { UsersService } from '../users/users.service';
 
 type SafeUser = Omit<
   typeof schema.users.$inferSelect,
@@ -78,25 +79,8 @@ export class AuthService {
     private redisService: RedisService,
     private passwordResetTokensService: PasswordResetTokensService,
     private readonly configService: ConfigService,
+    private readonly usersService: UsersService,
   ) {}
-
-  private async getUserByEmail(email: string) {
-    const result = await this.database
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.email, email));
-
-    return result[0];
-  }
-
-  private async getUserById(id: string) {
-    const result = await this.database
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, id));
-
-    return result[0];
-  }
 
   private async generateVerificationToken() {
     const rawToken = randomBytes(32).toString('hex');
@@ -184,7 +168,7 @@ export class AuthService {
   async signup(data: RegisterDto): Promise<SignupResult> {
     const { email, firstName, lastName, password } = data;
 
-    const existingUser = await this.getUserByEmail(email);
+    const existingUser = await this.usersService.getUserByEmail(email);
     if (existingUser) {
       throw new ConflictException('Account already exists, please login');
     }
@@ -230,7 +214,7 @@ export class AuthService {
   async verifyEmail(data: VerifyEmailDto) {
     const { email, token } = data;
 
-    const user = await this.getUserByEmail(email);
+    const user = await this.usersService.getUserByEmail(email);
     if (!user) {
       throw new NotFoundException('Account not found');
     }
@@ -284,7 +268,7 @@ export class AuthService {
     data: ResendVerificationEmailDto,
   ): Promise<ResendVerificationEmailResult> {
     const { email } = data;
-    const user = await this.getUserByEmail(email);
+    const user = await this.usersService.getUserByEmail(email);
     if (!user) {
       this.logger.log(
         `Ignoring verification resend request for non-existent account: ${email}`,
@@ -328,7 +312,7 @@ export class AuthService {
 
   async login(data: LoginDto): Promise<LoginResult> {
     const { email, password } = data;
-    const existingUser = await this.getUserByEmail(email);
+    const existingUser = await this.usersService.getUserByEmail(email);
 
     if (!existingUser) {
       throw new UnauthorizedException('Invalid email or password');
@@ -377,7 +361,7 @@ export class AuthService {
 
   async forgotPassword(data: ForgotPasswordDto): Promise<ForgotPasswordResult> {
     const { email } = data;
-    const user = await this.getUserByEmail(email);
+    const user = await this.usersService.getUserByEmail(email);
 
     if (!user || !user.verifiedAt) {
       this.logger.log(
@@ -409,7 +393,7 @@ export class AuthService {
 
   async resetPassword(data: ResetPasswordDto): Promise<ResetPasswordResult> {
     const { email, token, newPassword } = data;
-    const user = await this.getUserByEmail(email);
+    const user = await this.usersService.getUserByEmail(email);
 
     if (!user) {
       throw new BadRequestException(
@@ -503,7 +487,7 @@ export class AuthService {
       throw new UnauthorizedException('Authentication token has expired');
     }
 
-    const user = await this.getUserById(userId);
+    const user = await this.usersService.getUserById(userId);
     if (!user) {
       throw new UnauthorizedException('User not found');
     }

@@ -2,6 +2,7 @@ import * as schema from '../database/schema';
 import { Inject, Injectable } from '@nestjs/common';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../database/database-connection';
+import { eq } from 'drizzle-orm';
 
 @Injectable()
 export class UsersService {
@@ -9,6 +10,7 @@ export class UsersService {
     @Inject(DATABASE_CONNECTION)
     private readonly database: NodePgDatabase<typeof schema>,
   ) {}
+
   async getUsers() {
     return this.database
       .select({
@@ -21,5 +23,21 @@ export class UsersService {
         updatedAt: schema.users.updatedAt,
       })
       .from(schema.users);
+  }
+
+  async getUserByEmail(email: string) {
+    const [user] = await this.database
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, email));
+    return user;
+  }
+
+  async getUserById(id: string) {
+    const [user] = await this.database
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, id));
+    return user;
   }
 }
