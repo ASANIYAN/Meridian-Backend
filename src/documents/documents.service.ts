@@ -10,6 +10,7 @@ import {
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { and, desc, eq, getTableColumns, ne, sql } from 'drizzle-orm';
 import { MembershipsService } from '../memberships/memberships.service';
+import { ShareLinksService } from '../share_links/share_links.service';
 
 type DocumentWithRole = typeof schema.documents.$inferSelect & {
   role: (typeof schema.membershipRoleEnum.enumValues)[number];
@@ -27,6 +28,7 @@ export class DocumentsService {
     @Inject(DATABASE_CONNECTION)
     private readonly database: NodePgDatabase<typeof schema>,
     private readonly membershipsService: MembershipsService,
+    private readonly sharelinksService: ShareLinksService,
   ) {}
 
   async getDocumentById(id: string) {
@@ -216,5 +218,30 @@ export class DocumentsService {
     }
 
     await this.membershipsService.removeMember(documentId, targetUserId);
+  }
+
+  async claimShareLink(documentId: string, token: string, userId: string) {
+    const link = await this.sharelinksService.findAndValidateLink(
+      documentId,
+      token,
+    );
+
+    const membership = await this.database.transaction(async () => {
+      const member = await this.membershipsService.addMemberViaLink(
+        documentId,
+        userId,
+        link.role as 'editor' | 'viewer',
+      );
+
+      if (link.isSingleUse) {
+        await this.sharelinksService.markLinkAsClaimed(link.id, userId);
+      }
+
+      return member;
+    });
+
+    const document = await this.getDocumentById(documentId);
+
+    return { membership, document };
   }
 }

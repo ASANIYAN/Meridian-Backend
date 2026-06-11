@@ -116,4 +116,40 @@ export class MembershipsService {
         ),
       );
   }
+
+  async addMemberViaLink(
+    documentId: string,
+    userId: string,
+    role: 'editor' | 'viewer',
+  ) {
+    const documentMembership = await this.getUserDocumentMembership(
+      documentId,
+      userId,
+    );
+
+    if (documentMembership) {
+      throw new ConflictException('User is already a member of this document.');
+    }
+
+    const user = await this.usersService.getUserById(userId);
+
+    const [member] = await this.database
+      .insert(schema.memberships)
+      .values({
+        documentId,
+        userId,
+        role,
+        membershipMode: 'link',
+      })
+      .returning();
+
+    return {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: member.role,
+      membershipMode: member.membershipMode,
+      createdAt: member.createdAt,
+    };
+  }
 }

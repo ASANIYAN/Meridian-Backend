@@ -1,6 +1,7 @@
 import * as schema from '../database/schema';
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -24,7 +25,9 @@ export class ShareLinksService {
     createdBy: string,
     dto: CreateShareLinkDto,
   ) {
-    const appUrl = this.configService.getOrThrow<string>('APP_URL');
+    const appUrl = this.configService
+      .getOrThrow<string>('APP_URL')
+      .replace(/\/$/, '');
     const expiresAt = new Date(
       Date.now() +
         this.configService.getOrThrow<number>('SHARE_LINK_EXPIRY_DAYS') *
@@ -37,10 +40,14 @@ export class ShareLinksService {
         documentId,
         createdBy,
         role: dto.role,
-        isSingleUse: dto.isSingleUse,
+        isSingleUse: dto.isSingleUse ?? false,
         expiresAt,
       })
       .returning();
+
+    if (!result) {
+      throw new Error('Failed to create share link');
+    }
 
     const url = `${appUrl}/join/${result.token}`;
 
@@ -48,15 +55,16 @@ export class ShareLinksService {
   }
 
   async revokeShareLink(documentId: string, token: string) {
-    const where = and(
-      eq(schema.shareLinks.token, token),
-      eq(schema.shareLinks.documentId, documentId),
-    );
-
     const [updatedLink] = await this.database
       .update(schema.shareLinks)
       .set({ revokedAt: new Date() })
-      .where(and(where, isNull(schema.shareLinks.revokedAt)))
+      .where(
+        and(
+          eq(schema.shareLinks.token, token),
+          eq(schema.shareLinks.documentId, documentId),
+          isNull(schema.shareLinks.revokedAt),
+        ),
+      )
       .returning();
 
     if (updatedLink) {
@@ -66,12 +74,58 @@ export class ShareLinksService {
     const [existing] = await this.database
       .select()
       .from(schema.shareLinks)
-      .where(where);
+      .where(
+        and(
+          eq(schema.shareLinks.token, token),
+          eq(schema.shareLinks.documentId, documentId),
+        ),
+      );
 
     if (!existing) {
       throw new NotFoundException('Link is not found');
     }
 
     throw new BadRequestException('Link is already revoked.');
+  }
+
+  async findAndValidateLink(documentId: string, token: string) {
+    const [link] = await this.database
+      .select()
+      .from(schema.shareLinks)
+      .where(
+        and(
+          eq(schema.shareLinks.documentId, documentId),
+          eq(schema.shareLinks.token, token),
+        ),
+      )
+      .limit(1);
+
+    if (!link) {
+      throw new NotFoundException('Link not found');
+    }
+
+    if (link.revokedAt) {
+      throw new ForbiddenException('Share link has been revoked');
+    }
+
+    if (link.expiresAt && link.expiresAt <= new Date()) {
+      throw new ForbiddenException('Link has expired');
+    }
+
+    if (link.isSingleUse && link.claimedAt) {
+      throw new ForbiddenException('Link has already been claimed');
+    }
+
+    return link;
+  }
+
+  async markLinkAsClaimed(linkId: string, userId: string) {
+    await this.database
+      .update(schema.shareLinks)
+      .set({
+        claimedBy: userId,
+        claimedAt: new Date(),
+      })
+      .where(eq(schema.shareLinks.id, linkId));
   }
 }
