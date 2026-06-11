@@ -451,6 +451,53 @@ export class DocumentsController {
     });
   }
 
+  @Delete(':id/members/:userId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Remove document member',
+    description:
+      'Permanently removes a member from a document. Only the document author may remove members. The author cannot remove themselves. The removed member immediately loses document access; their operations and history are preserved.',
+  })
+  @ApiBadRequestResponse({
+    description: 'Author attempted to remove themselves.',
+    schema: errorResponseSchema(
+      400,
+      'Author cannot remove themselves',
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description:
+      'Document does not exist, has been deleted, or target user is not a member.',
+    schema: errorResponseSchema(404, 'Member not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async deleteMember(
+    @Param('id') documentId: string,
+    @Param('userId') targetUserId: string,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    await this.documentService.removeDocumentMember(
+      documentId,
+      targetUserId,
+      request.user.userId,
+    );
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(

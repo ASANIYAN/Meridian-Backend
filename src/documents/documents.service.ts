@@ -173,6 +173,10 @@ export class DocumentsService {
     callerUserId: string,
     role: 'editor' | 'viewer',
   ) {
+    if (targetUserId === callerUserId) {
+      throw new BadRequestException('Cannot change your own role');
+    }
+
     const targetMembership =
       await this.membershipsService.getUserDocumentMembership(
         documentId,
@@ -183,16 +187,6 @@ export class DocumentsService {
       throw new NotFoundException('Member not found');
     }
 
-    if (targetMembership.role === 'author') {
-      throw new BadRequestException(
-        'Cannot change the role of the document author.',
-      );
-    }
-
-    if (targetUserId === callerUserId) {
-      throw new BadRequestException('Cannot change your own role');
-    }
-
     const updatedMembership = await this.membershipsService.updateMemberRole(
       documentId,
       targetUserId,
@@ -200,5 +194,27 @@ export class DocumentsService {
     );
 
     return updatedMembership;
+  }
+
+  async removeDocumentMember(
+    documentId: string,
+    targetUserId: string,
+    callerUserId: string,
+  ) {
+    if (targetUserId === callerUserId) {
+      throw new BadRequestException('Author cannot remove themselves');
+    }
+
+    const targetMembership =
+      await this.membershipsService.getUserDocumentMembership(
+        documentId,
+        targetUserId,
+      );
+
+    if (!targetMembership) {
+      throw new NotFoundException('Member not found');
+    }
+
+    await this.membershipsService.removeMember(documentId, targetUserId);
   }
 }

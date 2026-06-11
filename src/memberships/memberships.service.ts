@@ -3,7 +3,6 @@ import {
   ConflictException,
   Inject,
   Injectable,
-  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -73,12 +72,6 @@ export class MembershipsService {
     userId: string,
     role: 'editor' | 'viewer',
   ) {
-    const user = await this.usersService.getUserById(userId);
-
-    if (!user) {
-      throw new NotFoundException('User not found.');
-    }
-
     const [membership] = await this.database
       .update(schema.memberships)
       .set({ role, updatedAt: new Date() })
@@ -91,8 +84,17 @@ export class MembershipsService {
       .returning();
 
     if (!membership) {
-      throw new InternalServerErrorException('Failed to update member role.');
+      throw new NotFoundException('Member not found');
     }
+
+    const [user] = await this.database
+      .select({
+        id: schema.users.id,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId));
 
     return {
       id: user.id,
@@ -102,5 +104,16 @@ export class MembershipsService {
       membershipMode: membership.membershipMode,
       createdAt: membership.createdAt,
     };
+  }
+
+  async removeMember(documentId: string, userId: string) {
+    await this.database
+      .delete(schema.memberships)
+      .where(
+        and(
+          eq(schema.memberships.documentId, documentId),
+          eq(schema.memberships.userId, userId),
+        ),
+      );
   }
 }

@@ -27,7 +27,15 @@ export class UsersService {
 
   async getUserByEmail(email: string) {
     const [user] = await this.database
-      .select()
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        verifiedAt: schema.users.verifiedAt,
+        createdAt: schema.users.createdAt,
+        updatedAt: schema.users.updatedAt,
+      })
       .from(schema.users)
       .where(eq(schema.users.email, email));
     return user;
@@ -35,9 +43,25 @@ export class UsersService {
 
   async getUserById(id: string) {
     const [user] = await this.database
-      .select()
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        verifiedAt: schema.users.verifiedAt,
+        createdAt: schema.users.createdAt,
+        updatedAt: schema.users.updatedAt,
+      })
       .from(schema.users)
       .where(eq(schema.users.id, id));
+    return user;
+  }
+
+  async getUserCredentialsByEmail(email: string) {
+    const [user] = await this.database
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.email, email));
     return user;
   }
 }
