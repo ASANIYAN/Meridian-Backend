@@ -10,9 +10,10 @@ import {
 } from './documents.guards';
 import { DatabaseModule } from '../database/database.module';
 import { RedisService } from '../redis/redis.service';
+import { ShareLinksModule } from '../share_links/share_links.module';
 
 @Module({
-  imports: [DatabaseModule, MembershipsModule],
+  imports: [DatabaseModule, MembershipsModule, ShareLinksModule],
   providers: [
     DocumentsService,
     DocumentExistsGuard,

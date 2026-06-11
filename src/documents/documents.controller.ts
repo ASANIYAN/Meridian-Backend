@@ -53,11 +53,17 @@ import { AddDocumentMemberDto } from './dto/add-document-member.dto';
 import { AddDocumentMemberResponseDataDto } from './dto/add-document-member-response.dto';
 import { UpdateDocumentMemberRole } from './dto/update-document-member-role.dto';
 import { UpdateDocumentMemberRoleResponse } from './dto/update-document-member-role-response.dto';
+import { CreateShareLinkDto } from '../share_links/dto/create-share-link.dto';
+import { CreateShareLinkResponseDataDto } from '../share_links/dto/create-share-link-response.dto';
+import { ShareLinksService } from '../share_links/share_links.service';
 
 @ApiTags('Documents')
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly documentService: DocumentsService) {}
+  constructor(
+    private readonly documentService: DocumentsService,
+    private readonly sharelinksService: ShareLinksService,
+  ) {}
 
   @Get()
   @UseGuards(JwtAuthGuard)
@@ -284,6 +290,60 @@ export class DocumentsController {
     );
 
     return buildSuccessResponse('Document created successfully.', { document });
+  }
+
+  @Post(':id/links')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Create share link',
+    description:
+      'Generates a shareable invitation link for the document with a pre-assigned role. Only the document author may create links. The link token is a UUID and expires in 7 days by default. Set is_single_use to true to invalidate the link after the first claim.',
+  })
+  @ApiSuccessResponseEnvelope({
+    status: 201,
+    dataDto: CreateShareLinkResponseDataDto,
+    description: 'Share link created successfully.',
+    messageExample: 'Link created successfully.',
+  })
+  @ApiBadRequestResponse({
+    description: 'Validation failed — role is not editor or viewer.',
+    schema: errorResponseSchema(
+      400,
+      ['role must be one of the following values: editor, viewer'],
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async createLink(
+    @Param('id') documentId: string,
+    @Body() body: CreateShareLinkDto,
+    @Req() request: Request & { user: JwtPayload },
+  ) {
+    const link = await this.sharelinksService.createShareLink(
+      documentId,
+      request.user.userId,
+      body,
+    );
+
+    return buildSuccessResponse('Link created successfully.', { link });
   }
 
   @Patch(':id/members/:userId')
