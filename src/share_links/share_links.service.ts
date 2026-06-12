@@ -49,7 +49,7 @@ export class ShareLinksService {
       throw new Error('Failed to create share link');
     }
 
-    const url = `${appUrl}/join/${result.token}`;
+    const url = `${appUrl}/join/${documentId}?token=${result.token}`;
 
     return { ...result, url };
   }

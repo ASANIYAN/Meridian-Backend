@@ -188,7 +188,7 @@ export class DocumentsController {
     });
   }
 
-  @Post(':id/links/:token/validate')
+  @Post(':id/links/validate')
   @UseGuards(JwtAuthGuard, DocumentExistsGuard) // ← NO DocumentMembershipGuard
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
@@ -204,7 +204,7 @@ export class DocumentsController {
   @ApiNotFoundResponse({ description: 'Share link not found' })
   async claimShareLink(
     @Param('id') documentId: string,
-    @Param('token') token: string,
+    @Query('token') token: string,
     @Req() request: Request & { user: JwtPayload },
   ) {
     const userId = request.user.userId;
