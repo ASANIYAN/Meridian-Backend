@@ -10,7 +10,7 @@ import WebSocket from 'ws';
 
 const port = Number(process.env.WS_PORT) || 8001;
 
-@WebSocketGateway({ port })
+@WebSocketGateway(port)
 export class CollaborationGateway
   implements
     OnGatewayInit,
