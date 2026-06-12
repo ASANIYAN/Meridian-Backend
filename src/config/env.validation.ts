@@ -28,4 +28,5 @@ export const envValidationSchema = Joi.object({
   SMTP_PASS: Joi.string().allow('').required(),
   SMTP_SECURE: Joi.boolean().required(),
   SHARE_LINK_EXPIRY_DAYS: Joi.number().integer().positive().default(7),
+  WS_PORT: Joi.number().port().default(8001),
 });
