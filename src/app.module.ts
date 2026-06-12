@@ -16,7 +16,9 @@ import { MailModule } from './mail/mail.module';
 import { RedisModule } from './redis/redis.module';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { CollaborationModule } from './collaboration/collaboration.module';
+import { HttpOnlyThrottlerGuard } from './common/guards/http-only-throttler.guard';
 
 @Module({
   imports: [
@@ -56,12 +58,13 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
     AuthModule,
     MailModule,
     RedisModule,
+    CollaborationModule,
   ],
   controllers: [AppController],
   providers: [
     {
       provide: APP_GUARD,
-      useClass: ThrottlerGuard,
+      useClass: HttpOnlyThrottlerGuard,
     },
   ],
 })

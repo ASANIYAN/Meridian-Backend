@@ -3,12 +3,14 @@ import { AppModule } from './app.module';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { WsAdapter } from '@nestjs/platform-ws';
 
 async function bootstrap() {
   const logger = new Logger('Boot');
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('v1');
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  app.useWebSocketAdapter(new WsAdapter(app));
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Meridian API')
