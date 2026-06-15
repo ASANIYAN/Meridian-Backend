@@ -29,8 +29,3 @@ export class DocumentMemberDto {
   @ApiProperty({ example: '2026-06-08T10:00:00.000Z' })
   createdAt!: string;
 }
-
-export class GetDocumentMembersResponseDataDto {
-  @ApiProperty({ type: DocumentMemberDto, isArray: true })
-  members!: DocumentMemberDto[];
-}
