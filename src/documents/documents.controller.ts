@@ -23,13 +23,10 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { CreateDocumentDto } from './dto/create-document.dto';
-import {
-  CreateDocumentResponseDataDto,
-  UpdateDocumentResponseDataDto,
-} from './dto/document-response.dto';
-import { ListDocumentsResponseDataDto } from './dto/list-documents-response.dto';
-import { GetDocumentResponseDataDto } from './dto/get-document-response.dto';
-import { GetDocumentMembersResponseDataDto } from './dto/get-document-members-response.dto';
+import { DocumentRecordResponseDto } from './dto/document-response.dto';
+import { DocumentWithRoleDto } from './dto/list-documents-response.dto';
+import { DocumentWithRoleAndCountDto } from './dto/get-document-response.dto';
+import { DocumentMemberDto } from './dto/get-document-members-response.dto';
 import {
   buildSuccessResponse,
   SuccessResponse,
@@ -50,12 +47,10 @@ import {
 import { UpdateDocumentDto } from './dto/update-document.dto';
 import { UpdateDocumentStatusDto } from './dto/update-document-status.dto';
 import { AddDocumentMemberDto } from './dto/add-document-member.dto';
-import { AddDocumentMemberResponseDataDto } from './dto/add-document-member-response.dto';
 import { UpdateDocumentMemberRole } from './dto/update-document-member-role.dto';
-import { UpdateDocumentMemberRoleResponse } from './dto/update-document-member-role-response.dto';
 import { CreateShareLinkDto } from '../share_links/dto/create-share-link.dto';
-import { CreateShareLinkResponseDataDto } from '../share_links/dto/create-share-link-response.dto';
-import { RevokeShareLinkResponseDataDto } from '../share_links/dto/revoke-share-link-response.dto';
+import { CreateShareLinkResponseDto } from '../share_links/dto/create-share-link-response.dto';
+import { RevokeShareLinkResponseDto } from '../share_links/dto/revoke-share-link-response.dto';
 import { ShareLinksService } from '../share_links/share_links.service';
 import { ClaimShareLinkResponseDataDto } from './dto/claim-share-link-response.dto';
 
@@ -76,7 +71,8 @@ export class DocumentsController {
       'Returns all documents where the requesting user has any membership, including their role on each document. Excludes deleted documents. Ordered by last updated descending.',
   })
   @ApiSuccessResponseEnvelope({
-    dataDto: ListDocumentsResponseDataDto,
+    dataDto: DocumentWithRoleDto,
+    isArray: true,
     description: 'Documents retrieved successfully.',
     messageExample: 'Documents retrieved successfully.',
     meta: {
@@ -104,7 +100,7 @@ export class DocumentsController {
 
     return buildSuccessResponse(
       'Documents retrieved successfully.',
-      { documents: result.data },
+      result.data,
       result.meta,
     );
   }
@@ -118,7 +114,7 @@ export class DocumentsController {
       'Returns metadata for a single document the requesting user is a member of, including their role and the total member count.',
   })
   @ApiSuccessResponseEnvelope({
-    dataDto: GetDocumentResponseDataDto,
+    dataDto: DocumentWithRoleAndCountDto,
     description: 'Document retrieved successfully.',
     messageExample: 'Document retrieved successfully.',
   })
@@ -146,9 +142,10 @@ export class DocumentsController {
       await this.documentService.getDocumentWithMemberCount(documentId);
     const mergedResult = { ...result, role: request.membershipRole };
 
-    return buildSuccessResponse('Document retrieved successfully.', {
-      document: mergedResult,
-    });
+    return buildSuccessResponse(
+      'Document retrieved successfully.',
+      mergedResult,
+    );
   }
 
   @Get(':id/members')
@@ -160,7 +157,8 @@ export class DocumentsController {
       'Returns all members of a document with their role and how they joined. Accessible to all membership roles (author, editor, viewer).',
   })
   @ApiSuccessResponseEnvelope({
-    dataDto: GetDocumentMembersResponseDataDto,
+    dataDto: DocumentMemberDto,
+    isArray: true,
     description: 'Document members retrieved successfully.',
     messageExample: 'Document members retrieved successfully.',
   })
@@ -183,9 +181,10 @@ export class DocumentsController {
   async listMembers(@Param('id') documentId: string) {
     const members = await this.documentService.getDocumentMembers(documentId);
 
-    return buildSuccessResponse('Document members retrieved successfully.', {
+    return buildSuccessResponse(
+      'Document members retrieved successfully.',
       members,
-    });
+    );
   }
 
   @Post(':id/links/validate')
@@ -232,7 +231,7 @@ export class DocumentsController {
   })
   @ApiSuccessResponseEnvelope({
     status: 201,
-    dataDto: AddDocumentMemberResponseDataDto,
+    dataDto: DocumentMemberDto,
     description: 'Member added successfully.',
     messageExample: 'Member added successfully.',
   })
@@ -276,7 +275,7 @@ export class DocumentsController {
       body.role,
     );
 
-    return buildSuccessResponse('Member added successfully.', { member });
+    return buildSuccessResponse('Member added successfully.', member);
   }
 
   @Post()
@@ -290,7 +289,7 @@ export class DocumentsController {
   })
   @ApiSuccessResponseEnvelope({
     status: 201,
-    dataDto: CreateDocumentResponseDataDto,
+    dataDto: DocumentRecordResponseDto,
     description: 'Document created successfully.',
     messageExample: 'Document created successfully.',
   })
@@ -310,16 +309,14 @@ export class DocumentsController {
     @Body() data: CreateDocumentDto,
     @Req() request: Request & { user: JwtPayload },
   ): Promise<
-    SuccessResponse<{
-      document: Awaited<ReturnType<DocumentsService['createDocument']>>;
-    }>
+    SuccessResponse<Awaited<ReturnType<DocumentsService['createDocument']>>>
   > {
     const document = await this.documentService.createDocument(
       data.title,
       request.user.userId,
     );
 
-    return buildSuccessResponse('Document created successfully.', { document });
+    return buildSuccessResponse('Document created successfully.', document);
   }
 
   @Post(':id/links')
@@ -338,7 +335,7 @@ export class DocumentsController {
   })
   @ApiSuccessResponseEnvelope({
     status: 201,
-    dataDto: CreateShareLinkResponseDataDto,
+    dataDto: CreateShareLinkResponseDto,
     description: 'Share link created successfully.',
     messageExample: 'Link created successfully.',
   })
@@ -373,7 +370,7 @@ export class DocumentsController {
       body,
     );
 
-    return buildSuccessResponse('Link created successfully.', { link });
+    return buildSuccessResponse('Link created successfully.', link);
   }
 
   @Patch(':id/links/:token')
@@ -390,7 +387,7 @@ export class DocumentsController {
       'Revokes a share link so it can no longer be used to join the document. Only the document author may revoke links. Members who already joined via this link are unaffected.',
   })
   @ApiSuccessResponseEnvelope({
-    dataDto: RevokeShareLinkResponseDataDto,
+    dataDto: RevokeShareLinkResponseDto,
     description: 'Share link revoked successfully.',
     messageExample: 'Link revoked successfully.',
   })
@@ -419,7 +416,7 @@ export class DocumentsController {
       token,
     );
 
-    return buildSuccessResponse('Link revoked successfully.', { link });
+    return buildSuccessResponse('Link revoked successfully.', link);
   }
 
   @Patch(':id/members/:userId')
@@ -436,7 +433,7 @@ export class DocumentsController {
       'Changes the role of a document member to editor or viewer. Only the document author may change roles. The author role cannot be changed, and the author cannot change their own role.',
   })
   @ApiSuccessResponseEnvelope({
-    dataDto: UpdateDocumentMemberRoleResponse,
+    dataDto: DocumentMemberDto,
     description: 'Member role updated successfully.',
     messageExample: 'Member role updated successfully.',
   })
@@ -475,9 +472,10 @@ export class DocumentsController {
       body.role,
     );
 
-    return buildSuccessResponse('Member role updated successfully.', {
-      member: updatedMember,
-    });
+    return buildSuccessResponse(
+      'Member role updated successfully.',
+      updatedMember,
+    );
   }
 
   @Patch(':id/status')
@@ -494,7 +492,7 @@ export class DocumentsController {
       'Updates the status of a document to active or inactive. Only the document author may change status — editors and viewers receive 403. Setting status to deleted or draft via this endpoint is not permitted.',
   })
   @ApiSuccessResponseEnvelope({
-    dataDto: UpdateDocumentResponseDataDto,
+    dataDto: DocumentRecordResponseDto,
     description: 'Document status updated successfully.',
     messageExample: 'Document status updated successfully.',
   })
@@ -528,9 +526,10 @@ export class DocumentsController {
       body.status,
     );
 
-    return buildSuccessResponse('Document status updated successfully.', {
-      document: updatedDocument,
-    });
+    return buildSuccessResponse(
+      'Document status updated successfully.',
+      updatedDocument,
+    );
   }
 
   @Patch(':id')
@@ -547,7 +546,7 @@ export class DocumentsController {
       'Updates the title of a document. Only authors and editors may update — viewers receive 403. Content changes go through WebSocket, not this endpoint.',
   })
   @ApiSuccessResponseEnvelope({
-    dataDto: UpdateDocumentResponseDataDto,
+    dataDto: DocumentRecordResponseDto,
     description: 'Document updated successfully.',
     messageExample: 'Document updated successfully.',
   })
@@ -582,9 +581,10 @@ export class DocumentsController {
       body.title!,
     );
 
-    return buildSuccessResponse('Document updated successfully.', {
-      document: updatedDocument,
-    });
+    return buildSuccessResponse(
+      'Document updated successfully.',
+      updatedDocument,
+    );
   }
 
   @Delete(':id/members/:userId')

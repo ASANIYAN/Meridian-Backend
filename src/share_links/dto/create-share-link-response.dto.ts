@@ -28,8 +28,3 @@ export class CreateShareLinkResponseDto {
   @ApiProperty({ example: '2026-06-11T12:00:00.000Z' })
   createdAt!: string;
 }
-
-export class CreateShareLinkResponseDataDto {
-  @ApiProperty({ type: CreateShareLinkResponseDto })
-  link!: CreateShareLinkResponseDto;
-}

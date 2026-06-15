@@ -5,8 +5,3 @@ export class DocumentWithRoleAndCountDto extends DocumentWithRoleDto {
   @ApiProperty({ example: 4 })
   memberCount!: number;
 }
-
-export class GetDocumentResponseDataDto {
-  @ApiProperty({ type: DocumentWithRoleAndCountDto })
-  document!: DocumentWithRoleAndCountDto;
-}
