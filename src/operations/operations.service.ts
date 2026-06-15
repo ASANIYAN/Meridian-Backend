@@ -26,4 +26,26 @@ export class OperationsService {
       )
       .orderBy(asc(schema.operations.operationSequence));
   }
+
+  async insertOperation(
+    db: NodePgDatabase<typeof schema>,
+    data: { documentId: string; userId: string; yjsUpdate: Buffer },
+  ) {
+    const [result] = await db
+      .insert(schema.operations)
+      .values({
+        documentId: data.documentId,
+        userId: data.userId,
+        type: 'yjs_update',
+        yjsUpdate: data.yjsUpdate,
+        clockValue: null,
+        payload: null,
+        afterId: null,
+      })
+      .returning();
+
+    if (!result) throw new Error('operations insert returned no rows');
+
+    return result;
+  }
 }

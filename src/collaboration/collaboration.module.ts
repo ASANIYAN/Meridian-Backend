@@ -5,6 +5,8 @@ import { RedisModule } from '../redis/redis.module';
 import { MembershipsModule } from '../memberships/memberships.module';
 import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { OperationsModule } from '../operations/operations.module';
+import { OutboxModule } from '../outbox/outbox.module';
+import { DatabaseModule } from '../database/database.module';
 
 @Module({
   imports: [
@@ -13,6 +15,8 @@ import { OperationsModule } from '../operations/operations.module';
     MembershipsModule,
     SnapshotsModule,
     OperationsModule,
+    OutboxModule,
+    DatabaseModule,
   ],
   providers: [CollaborationGateway],
   controllers: [],

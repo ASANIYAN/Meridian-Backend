@@ -11,33 +11,45 @@ import { createClient, type RedisClientType } from 'redis';
 export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly client: RedisClientType;
+  private readonly subscriber: RedisClientType;
 
   constructor(private readonly configService: ConfigService) {
     const url = this.configService.getOrThrow<string>('REDIS_URL');
 
     this.client = createClient({ url });
+    this.subscriber = this.client.duplicate();
 
     this.client.on('error', (error: Error) => {
       this.logger.error(`Redis client error: ${error.message}`);
     });
+
+    this.subscriber.on('error', (error: Error) => {
+      this.logger.error(`Redis subscriber error: ${error.message}`);
+    });
   }
 
   async onModuleInit() {
-    if (this.client.isOpen) {
+    if (this.client.isOpen && this.subscriber.isOpen) {
       return;
     }
 
     await this.client.connect();
-    this.logger.log('Redis client connected');
+    await this.subscriber.connect();
+    this.logger.log('Redis client and subscriber connected');
   }
 
   async onModuleDestroy() {
-    if (!this.client.isOpen) {
-      return;
-    }
+    if (this.client.isOpen) await this.client.quit();
+    if (this.subscriber.isOpen) await this.subscriber.quit();
+    this.logger.log('Redis clients disconnected');
+  }
 
-    await this.client.quit();
-    this.logger.log('Redis client disconnected');
+  async publish(channel: string, data: Buffer) {
+    await this.client.sendCommand(['PUBLISH', channel, data]);
+  }
+
+  async subscribe(channel: string, callback: (data: Buffer) => void) {
+    await this.subscriber.subscribe(channel, callback, true);
   }
 
   async blacklistToken(jti: string, ttlSeconds: number) {
