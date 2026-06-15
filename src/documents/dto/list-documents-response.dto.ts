@@ -9,8 +9,3 @@ export class DocumentWithRoleDto extends DocumentRecordResponseDto {
   })
   role!: (typeof membershipRoleEnum.enumValues)[number];
 }
-
-export class ListDocumentsResponseDataDto {
-  @ApiProperty({ type: DocumentWithRoleDto, isArray: true })
-  documents!: DocumentWithRoleDto[];
-}

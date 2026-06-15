@@ -26,13 +26,3 @@ export class DocumentRecordResponseDto {
   @ApiProperty({ example: '2026-06-08T10:00:00.000Z' })
   updatedAt!: string;
 }
-
-export class CreateDocumentResponseDataDto {
-  @ApiProperty({ type: DocumentRecordResponseDto })
-  document!: DocumentRecordResponseDto;
-}
-
-export class UpdateDocumentResponseDataDto {
-  @ApiProperty({ type: DocumentRecordResponseDto })
-  document!: DocumentRecordResponseDto;
-}

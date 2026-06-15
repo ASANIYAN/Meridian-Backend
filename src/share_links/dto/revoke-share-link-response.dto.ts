@@ -28,8 +28,3 @@ export class RevokeShareLinkResponseDto {
   @ApiProperty({ example: '2026-06-11T12:00:00.000Z' })
   revokedAt!: string;
 }
-
-export class RevokeShareLinkResponseDataDto {
-  @ApiProperty({ type: RevokeShareLinkResponseDto })
-  link!: RevokeShareLinkResponseDto;
-}
