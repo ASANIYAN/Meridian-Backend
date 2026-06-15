@@ -12,12 +12,14 @@ import {
 import { sql } from 'drizzle-orm';
 import { documents } from '../documents/schema';
 import { users } from '../users/schema';
+import { bytea } from '../common/db/custom-types';
 
 // operation types for the CRDT logic
 export const operationTypeEnum = pgEnum('operation_type', [
   'insert',
   'delete',
   'format',
+  'yjs_update',
 ]);
 
 export const operations = pgTable(
@@ -37,6 +39,8 @@ export const operations = pgTable(
 
     type: operationTypeEnum('type').notNull(),
 
+    yjsUpdate: bytea('yjs_update').default(sql`null`),
+
     // The content-addressable reference for CRDT positioning
     afterId: uuid('after_id'),
 
@@ -46,12 +50,10 @@ export const operations = pgTable(
       .notNull(),
 
     // Lamport timestamp for causal ordering
-    clockValue: bigint('clock_value', { mode: 'bigint' }).notNull(),
+    clockValue: bigint('clock_value', { mode: 'bigint' }),
 
-    // Polymorphic payload (validated via Zod)
-    payload: jsonb('payload')
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
+    // Polymorphic payload (validated via Zod); null for yjs_update rows
+    payload: jsonb('payload'),
 
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
@@ -68,13 +70,3 @@ export const operations = pgTable(
     ),
   }),
 );
-
-// export type OperationPayload =
-//   | { type: 'insert'; insert_id: string; content: string }
-//   | { type: 'delete'; delete_id: string }
-//   | {
-//       type: 'format';
-//       start_id: string;
-//       end_id: string;
-//       formatting: Record<string, any>;
-//     };

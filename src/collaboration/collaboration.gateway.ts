@@ -1,4 +1,5 @@
-import { Logger, OnApplicationShutdown } from '@nestjs/common';
+import * as schema from '../database/schema';
+import { Inject, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -10,6 +11,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { randomUUID } from 'node:crypto';
 import { IncomingMessage } from 'node:http';
 import WebSocket from 'ws';
 import { RedisService } from '../redis/redis.service';
@@ -17,6 +19,9 @@ import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { MembershipsService } from '../memberships/memberships.service';
 import { SnapshotsService } from '../snapshots/snapshots.service';
 import { OperationsService } from '../operations/operations.service';
+import { OutboxService } from '../outbox/outbox.service';
+import { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { DATABASE_CONNECTION } from '../database/database-connection';
 
 const port = Number(process.env.WS_PORT) || 8001;
 
@@ -43,15 +48,23 @@ export class CollaborationGateway
   server: WebSocket.Server | undefined;
 
   private readonly logger = new Logger(CollaborationGateway.name);
+  private readonly instanceId = Buffer.from(
+    randomUUID().replace(/-/g, ''),
+    'hex',
+  );
   private healthCheckInterval: NodeJS.Timeout | undefined;
+  private readonly subscribedChannels = new Set<string>();
   private roomsMap: RoomsMap = new Map();
 
   constructor(
+    @Inject(DATABASE_CONNECTION)
+    private readonly database: NodePgDatabase<typeof schema>,
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
     private readonly membershipService: MembershipsService,
     private readonly snapshotsService: SnapshotsService,
     private readonly operationsService: OperationsService,
+    private readonly outboxService: OutboxService,
   ) {}
   afterInit(_server: WebSocket.Server) {
     this.logger.log('WebSocket server initialized');
@@ -154,6 +167,24 @@ export class CollaborationGateway
     }
     this.roomsMap.get(documentId)!.add(client);
 
+    if (!this.subscribedChannels.has(documentId)) {
+      await this.redisService.subscribe(
+        `doc:${documentId}`,
+        (frame: Buffer) => {
+          if (frame.subarray(0, 16).equals(this.instanceId)) return;
+
+          const update = frame.subarray(16);
+          const room = this.roomsMap.get(documentId);
+          room?.forEach((socket) => {
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(update);
+            }
+          });
+        },
+      );
+      this.subscribedChannels.add(documentId);
+    }
+
     const snapshot = await this.snapshotsService.getLatestSnapshot(documentId);
 
     if (!snapshot) {
@@ -180,6 +211,63 @@ export class CollaborationGateway
         },
       }),
     );
+  }
+
+  @SubscribeMessage('update')
+  async handleUpdate(client: AuthenticatedSocket, data: Buffer): Promise<void> {
+    if (client.user.role === 'viewer') {
+      return;
+    }
+
+    const documentId = client.user.documentId;
+    if (!documentId) {
+      return;
+    }
+    try {
+      const opResult = await this.database.transaction(async (tx) => {
+        const result = await this.operationsService.insertOperation(tx, {
+          documentId,
+          userId: client.user.userId,
+          yjsUpdate: data,
+        });
+
+        await this.outboxService.insertOutboxEntry(tx, {
+          documentId,
+          operationId: result.id,
+          payload: data,
+        });
+
+        return result;
+      });
+
+      await this.redisService.publish(
+        `doc:${documentId}`,
+        Buffer.concat([this.instanceId, data]),
+      );
+
+      const room = this.roomsMap.get(documentId);
+      room?.forEach((socket) => {
+        if (socket !== client) {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(data);
+          }
+        }
+      });
+
+      client.send(
+        JSON.stringify({
+          event: 'ack',
+          data: {
+            operation_sequence: opResult.operationSequence,
+            status: 'ok',
+          },
+        }),
+      );
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : 'Unknown Error';
+      this.logger.error(`Error: ${errMsg}`);
+      client.send(JSON.stringify({ event: 'ack', data: { status: 'error' } }));
+    }
   }
 
   handleDisconnect(client: AuthenticatedSocket) {
