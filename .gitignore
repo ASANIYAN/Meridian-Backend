@@ -21,6 +21,7 @@ lerna-debug.log*
 
 # Claude Code
 .claude/
+CLAUDE.md
 
 # IDEs and editors
 /.idea

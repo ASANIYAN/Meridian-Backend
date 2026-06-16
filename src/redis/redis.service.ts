@@ -54,7 +54,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   async subscribe(channel: string, callback: (data: Buffer) => void) {
     // The trailing `true` enables buffer mode, so callback receives a Buffer
-    // instead of a decoded string — required for the binary payloads above.
+    // instead of a decoded string.
     await this.subscriber.subscribe(channel, callback, true);
   }
 
@@ -76,7 +76,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return value === 1;
   }
 
-  // SET ... NX is atomic, so concurrent callers can't both succeed for the same key —
+  // SET ... NX is atomic, so concurrent callers can't both succeed for the same key
   // only the first caller gets `true` until the TTL expires.
   async tryAcquireLock(key: string, ttlSeconds: number): Promise<boolean> {
     const result = await this.client.set(key, '1', {

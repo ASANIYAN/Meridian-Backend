@@ -48,7 +48,7 @@ export class CollaborationGateway
   server: WebSocket.Server | undefined;
 
   private readonly logger = new Logger(CollaborationGateway.name);
-  // Max operations allowed to accumulate since the last snapshot before we ask a worker to compact them.
+  // Max operations allowed to accumulate since the last snapshot before a worker compacts them.
   private readonly SNAPSHOT_THRESHOLD = 50;
   // Unique per-process id, prefixed onto every Redis-published frame so a process can
   // recognize and skip its own broadcasts coming back through its own subscription.
@@ -174,7 +174,7 @@ export class CollaborationGateway
     this.roomsMap.get(documentId)!.add(client);
 
     if (!this.subscribedChannels.has(documentId)) {
-      // Only mark this document as subscribed once both channels succeed — if one throws
+      // Only mark this document as subscribed once both channels succeed. If one throws
       // partway through, a later join retries cleanly instead of risking a duplicate
       // listener on whichever channel already subscribed.
       try {
