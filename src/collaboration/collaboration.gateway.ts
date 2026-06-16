@@ -214,7 +214,10 @@ export class CollaborationGateway
   }
 
   @SubscribeMessage('update')
-  async handleUpdate(client: AuthenticatedSocket, data: Buffer): Promise<void> {
+  async handleUpdate(
+    client: AuthenticatedSocket,
+    data: Buffer | number[],
+  ): Promise<void> {
     if (client.user.role === 'viewer') {
       return;
     }
@@ -223,18 +226,21 @@ export class CollaborationGateway
     if (!documentId) {
       return;
     }
+
+    const update = Buffer.isBuffer(data) ? data : Buffer.from(data);
+
     try {
       const opResult = await this.database.transaction(async (tx) => {
         const result = await this.operationsService.insertOperation(tx, {
           documentId,
           userId: client.user.userId,
-          yjsUpdate: data,
+          yjsUpdate: update,
         });
 
         await this.outboxService.insertOutboxEntry(tx, {
           documentId,
           operationId: result.id,
-          payload: data,
+          payload: update,
         });
 
         return result;
@@ -242,14 +248,14 @@ export class CollaborationGateway
 
       await this.redisService.publish(
         `doc:${documentId}`,
-        Buffer.concat([this.instanceId, data]),
+        Buffer.concat([this.instanceId, update]),
       );
 
       const room = this.roomsMap.get(documentId);
       room?.forEach((socket) => {
         if (socket !== client) {
           if (socket.readyState === WebSocket.OPEN) {
-            socket.send(data);
+            socket.send(update);
           }
         }
       });
