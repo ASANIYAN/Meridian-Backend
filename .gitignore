@@ -19,6 +19,9 @@ lerna-debug.log*
 /coverage
 /.nyc_output
 
+# VS Code
+.vscode/
+
 # Claude Code
 .claude/
 CLAUDE.md
