@@ -2,7 +2,7 @@ import * as schema from '../database/schema';
 import { Inject, Injectable } from '@nestjs/common';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { and, asc, eq, gt } from 'drizzle-orm';
+import { and, asc, count, eq, gt } from 'drizzle-orm';
 
 @Injectable()
 export class OperationsService {
@@ -47,5 +47,22 @@ export class OperationsService {
     if (!result) throw new Error('operations insert returned no rows');
 
     return result;
+  }
+
+  async countOperationsSinceSequence(
+    documentId: string,
+    afterSequence: number,
+  ): Promise<number> {
+    const [row] = await this.database
+      .select({ count: count() })
+      .from(schema.operations)
+      .where(
+        and(
+          eq(schema.operations.documentId, documentId),
+          gt(schema.operations.operationSequence, afterSequence),
+        ),
+      );
+
+    return row?.count ?? 0;
   }
 }

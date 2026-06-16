@@ -17,6 +17,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const url = this.configService.getOrThrow<string>('REDIS_URL');
 
     this.client = createClient({ url });
+    // A subscribed Redis connection can't issue other commands, so publishing and
+    // blacklisting need a separate connection from subscribing.
     this.subscriber = this.client.duplicate();
 
     this.client.on('error', (error: Error) => {
@@ -45,10 +47,14 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async publish(channel: string, data: Buffer) {
+    // Raw sendCommand instead of a typed publish helper, since payloads here are
+    // binary (Yjs updates) and need to go out byte-for-byte.
     await this.client.sendCommand(['PUBLISH', channel, data]);
   }
 
   async subscribe(channel: string, callback: (data: Buffer) => void) {
+    // The trailing `true` enables buffer mode, so callback receives a Buffer
+    // instead of a decoded string — required for the binary payloads above.
     await this.subscriber.subscribe(channel, callback, true);
   }
 
@@ -68,6 +74,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async isTokenBlacklisted(jti: string): Promise<boolean> {
     const value = await this.client.exists(this.getBlacklistKey(jti));
     return value === 1;
+  }
+
+  // SET ... NX is atomic, so concurrent callers can't both succeed for the same key —
+  // only the first caller gets `true` until the TTL expires.
+  async tryAcquireLock(key: string, ttlSeconds: number): Promise<boolean> {
+    const result = await this.client.set(key, '1', {
+      condition: 'NX',
+      expiration: { type: 'EX', value: ttlSeconds },
+    });
+    return result === 'OK';
   }
 
   private getBlacklistKey(jti: string) {

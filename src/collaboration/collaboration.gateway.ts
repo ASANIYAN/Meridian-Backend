@@ -48,11 +48,17 @@ export class CollaborationGateway
   server: WebSocket.Server | undefined;
 
   private readonly logger = new Logger(CollaborationGateway.name);
+  // Max operations allowed to accumulate since the last snapshot before we ask a worker to compact them.
+  private readonly SNAPSHOT_THRESHOLD = 50;
+  // Unique per-process id, prefixed onto every Redis-published frame so a process can
+  // recognize and skip its own broadcasts coming back through its own subscription.
   private readonly instanceId = Buffer.from(
     randomUUID().replace(/-/g, ''),
     'hex',
   );
   private healthCheckInterval: NodeJS.Timeout | undefined;
+  // Tracks which documents this process has already subscribed to on Redis, so a busy
+  // document with many local clients only gets one Redis subscription, not one per client.
   private readonly subscribedChannels = new Set<string>();
   private roomsMap: RoomsMap = new Map();
 
@@ -168,21 +174,51 @@ export class CollaborationGateway
     this.roomsMap.get(documentId)!.add(client);
 
     if (!this.subscribedChannels.has(documentId)) {
-      await this.redisService.subscribe(
-        `doc:${documentId}`,
-        (frame: Buffer) => {
-          if (frame.subarray(0, 16).equals(this.instanceId)) return;
+      // Only mark this document as subscribed once both channels succeed — if one throws
+      // partway through, a later join retries cleanly instead of risking a duplicate
+      // listener on whichever channel already subscribed.
+      try {
+        // Relays Yjs updates published by other instances into this instance's local room.
+        await this.redisService.subscribe(
+          `doc:${documentId}`,
+          (frame: Buffer) => {
+            // Skip frames this same instance published — they were already sent to the
+            // local room directly, so re-sending here would deliver them twice.
+            if (frame.subarray(0, 16).equals(this.instanceId)) return;
 
-          const update = frame.subarray(16);
-          const room = this.roomsMap.get(documentId);
-          room?.forEach((socket) => {
-            if (socket.readyState === WebSocket.OPEN) {
-              socket.send(update);
-            }
-          });
-        },
-      );
-      this.subscribedChannels.add(documentId);
+            const update = frame.subarray(16);
+            const room = this.roomsMap.get(documentId);
+            room?.forEach((socket) => {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(update);
+              }
+            });
+          },
+        );
+
+        // Same relay pattern as above, for presence (online/offline) events instead of edits.
+        await this.redisService.subscribe(
+          `presence:${documentId}`,
+          (frame: Buffer) => {
+            if (frame.subarray(0, 16).equals(this.instanceId)) return;
+
+            const payload = frame.subarray(16);
+            const room = this.roomsMap.get(documentId);
+            room?.forEach((socket) => {
+              if (socket.readyState === WebSocket.OPEN) {
+                socket.send(payload);
+              }
+            });
+          },
+        );
+
+        this.subscribedChannels.add(documentId);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to subscribe to document channels: ${msg}`);
+        client.close(1011, 'Failed to initialize document channel');
+        return;
+      }
     }
 
     const snapshot = await this.snapshotsService.getLatestSnapshot(documentId);
@@ -246,6 +282,8 @@ export class CollaborationGateway
         return result;
       });
 
+      // Prefixing with instanceId lets this same instance's `doc:` subscriber (above)
+      // recognize and ignore this broadcast when Redis echoes it back.
       await this.redisService.publish(
         `doc:${documentId}`,
         Buffer.concat([this.instanceId, update]),
@@ -276,7 +314,32 @@ export class CollaborationGateway
     }
   }
 
-  handleDisconnect(client: AuthenticatedSocket) {
+  private async broadcastPresence(
+    documentId: string,
+    room: Set<AuthenticatedSocket> | undefined,
+    userId: string,
+    status: 'offline',
+  ) {
+    const payload = Buffer.from(
+      JSON.stringify({ type: 'presence', userId, status }),
+    );
+
+    // Send to clients on this instance directly first — no need to wait on a Redis
+    // round trip for the common case where they're all on the same process.
+    room?.forEach((socket) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(payload);
+      }
+    });
+
+    // Then publish for other instances' rooms, since `room` here is only ever local.
+    await this.redisService.publish(
+      `presence:${documentId}`,
+      Buffer.concat([this.instanceId, payload]),
+    );
+  }
+
+  async handleDisconnect(client: AuthenticatedSocket) {
     if (!client.user) {
       this.logger.log('Unauthenticated client disconnected.');
       return;
@@ -287,13 +350,58 @@ export class CollaborationGateway
       this.logger.log('Client disconnected before joining a document');
       return;
     }
+
     const room = this.roomsMap.get(documentId);
     if (room) {
+      // Delete before broadcasting so the loop only reaches clients still in the room.
       room.delete(client);
+      await this.broadcastPresence(
+        documentId,
+        room,
+        client.user.userId,
+        'offline',
+      );
+
       if (room.size === 0) {
         this.roomsMap.delete(documentId);
       }
     }
+
+    // Isolated from the presence broadcast above: a DB/Redis hiccup here should only
+    // skip this bookkeeping, never break disconnect cleanup for other connected clients.
+    try {
+      const latestSnapshot =
+        await this.snapshotsService.getLatestSnapshot(documentId);
+      const afterSeq = latestSnapshot?.operationSequence ?? 0;
+      const opCount = await this.operationsService.countOperationsSinceSequence(
+        documentId,
+        afterSeq,
+      );
+
+      if (opCount >= this.SNAPSHOT_THRESHOLD) {
+        // Multiple clients can disconnect from the same document within the same
+        // window and all see the same stale op count — this lock lets only the first
+        // one through. It self-expires rather than being released explicitly, since
+        // there's no completion signal back from the snapshot worker yet.
+        const acquired = await this.redisService.tryAcquireLock(
+          `snapshot:lock:${documentId}`,
+          30,
+        );
+        if (acquired) {
+          // This only signals that a snapshot is needed — the actual snapshot
+          // (replaying operations into a new compacted state) is built by a worker
+          // consuming this channel, not by this gateway.
+          await this.redisService.publish(
+            'snapshot:jobs',
+            Buffer.from(JSON.stringify({ documentId })),
+          );
+        }
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(err);
+    }
+
     this.logger.log('Client disconnected');
   }
 
