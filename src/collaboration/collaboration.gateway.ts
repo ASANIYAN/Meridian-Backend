@@ -32,6 +32,10 @@ type AuthenticatedSocket = WebSocket & {
     role?: 'author' | 'editor' | 'viewer';
     documentId?: string;
   };
+  // Settled by handleConnection once client.user is safe to read. Message handlers
+  // await this first, since NestJS binds the message listener before handleConnection's
+  // async auth work finishes.
+  authReady: Promise<void>;
 };
 
 type RoomsMap = Map<string, Set<AuthenticatedSocket>>;
@@ -112,6 +116,22 @@ export class CollaborationGateway
   }
 
   async handleConnection(client: WebSocket, request: IncomingMessage) {
+    const authClient = client as AuthenticatedSocket;
+    // resolve/reject only exist inside this executor, so settleAuth carries them out
+    // to be called later, after the awaits below decide the outcome.
+    let settleAuth: (err?: unknown) => void = () => {};
+    authClient.authReady = new Promise<void>((resolve, reject) => {
+      settleAuth = (err) =>
+        err
+          ? reject(
+              err instanceof Error ? err : new Error('Authentication failed'),
+            )
+          : resolve();
+    });
+    // Prevents an "unhandled rejection" warning if the client disconnects before any
+    // message handler ever awaits authReady.
+    authClient.authReady.catch(() => {});
+
     try {
       const token = this.extractToken(request);
       const payload = await this.verifyJwt(token);
@@ -122,13 +142,17 @@ export class CollaborationGateway
 
       if (isBlacklisted) {
         client.close(4001, 'Token has been revoked');
+        settleAuth(new Error('Token has been revoked'));
         return;
       }
 
-      (client as AuthenticatedSocket).user = {
+      authClient.user = {
         userId: payload.userId,
         email: payload.email,
       };
+      // Unblocks any handleJoin/handleUpdate call that arrived early and is waiting
+      // on authReady — client.user is now safe for them to read.
+      settleAuth();
 
       this.logger.log('Client connected');
       client.on('message', (data: WebSocket.RawData) => {
@@ -140,6 +164,7 @@ export class CollaborationGateway
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Error: ${msg}`);
       client.close(4001, 'Authentication failed');
+      settleAuth(error);
       return;
     }
   }
@@ -149,6 +174,14 @@ export class CollaborationGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: { document_id: string },
   ): Promise<void> {
+    // Guards against this handler running before handleConnection has set
+    // client.user — see authReady's definition on AuthenticatedSocket.
+    try {
+      await client.authReady;
+    } catch {
+      return;
+    }
+
     const documentId = data.document_id;
     if (!documentId) {
       client.close(4001, 'No document id found');
@@ -254,6 +287,15 @@ export class CollaborationGateway
     client: AuthenticatedSocket,
     data: Buffer | number[],
   ): Promise<void> {
+    // Same guard as handleJoin: wait for handleConnection to finish before reading
+    // client.user.
+    try {
+      await client.authReady;
+    } catch {
+      // handleConnection already closed the socket; nothing to do here.
+      return;
+    }
+
     if (client.user.role === 'viewer') {
       return;
     }
