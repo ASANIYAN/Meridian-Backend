@@ -22,6 +22,7 @@ import { OperationsService } from '../operations/operations.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../database/database-connection';
+import { YjsService } from '../yjs/yjs.service';
 
 const port = Number(process.env.WS_PORT) || 8001;
 
@@ -75,6 +76,7 @@ export class CollaborationGateway
     private readonly snapshotsService: SnapshotsService,
     private readonly operationsService: OperationsService,
     private readonly outboxService: OutboxService,
+    private readonly yjsService: YjsService,
   ) {}
   afterInit(_server: WebSocket.Server) {
     this.logger.log('WebSocket server initialized');
@@ -308,11 +310,27 @@ export class CollaborationGateway
     const update = Buffer.isBuffer(data) ? data : Buffer.from(data);
 
     try {
+      const classified = this.yjsService.classifyUpdate(update);
+
       const opResult = await this.database.transaction(async (tx) => {
+        // Must be first — the lock must cover the MAX read, clock computation,
+        // and INSERT as one atomic unit to guarantee Lamport monotonicity.
+        await this.operationsService.acquireDocumentWriteLock(tx, documentId);
+
+        const localClock = await this.operationsService.getMaxClockValue(
+          tx,
+          documentId,
+        );
+        const received = BigInt(classified.receivedClock);
+        const clockValue = (localClock > received ? localClock : received) + 1n;
+
         const result = await this.operationsService.insertOperation(tx, {
           documentId,
           userId: client.user.userId,
           yjsUpdate: update,
+          type: classified.type,
+          payload: classified.payload,
+          clockValue,
         });
 
         await this.outboxService.insertOutboxEntry(tx, {

@@ -7,6 +7,7 @@ import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { OperationsModule } from '../operations/operations.module';
 import { OutboxModule } from '../outbox/outbox.module';
 import { DatabaseModule } from '../database/database.module';
+import { YjsModule } from '../yjs/yjs.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { DatabaseModule } from '../database/database.module';
     OperationsModule,
     OutboxModule,
     DatabaseModule,
+    YjsModule,
   ],
   providers: [CollaborationGateway],
   controllers: [],

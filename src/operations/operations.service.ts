@@ -2,7 +2,7 @@ import * as schema from '../database/schema';
 import { Inject, Injectable } from '@nestjs/common';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { and, asc, count, eq, gt } from 'drizzle-orm';
+import { and, asc, count, eq, gt, max } from 'drizzle-orm';
 
 @Injectable()
 export class OperationsService {
@@ -27,19 +27,54 @@ export class OperationsService {
       .orderBy(asc(schema.operations.operationSequence));
   }
 
+  // Serialises concurrent clock assignments for the same document. Without this
+  // lock, two transactions running simultaneously both read the same MAX(clock_value)
+  // and produce duplicate Lamport timestamps. The documents row is used because it
+  // always exists (unlike operations rows on a new document) and gives one mutex
+  // per document without blocking writes to other documents.
+  async acquireDocumentWriteLock(
+    db: NodePgDatabase<typeof schema>,
+    documentId: string,
+  ): Promise<void> {
+    await db
+      .select({ id: schema.documents.id })
+      .from(schema.documents)
+      .where(eq(schema.documents.id, documentId))
+      .for('update');
+  }
+
+  async getMaxClockValue(
+    db: NodePgDatabase<typeof schema>,
+    documentId: string,
+  ): Promise<bigint> {
+    const [row] = await db
+      .select({ maxClock: max(schema.operations.clockValue) })
+      .from(schema.operations)
+      .where(eq(schema.operations.documentId, documentId));
+
+    return row?.maxClock ?? 0n;
+  }
+
   async insertOperation(
     db: NodePgDatabase<typeof schema>,
-    data: { documentId: string; userId: string; yjsUpdate: Buffer },
+    data: {
+      documentId: string;
+      userId: string;
+      yjsUpdate: Buffer;
+      type: 'insert' | 'delete' | 'format';
+      payload: Record<string, unknown>;
+      clockValue: bigint;
+    },
   ) {
     const [result] = await db
       .insert(schema.operations)
       .values({
         documentId: data.documentId,
         userId: data.userId,
-        type: 'yjs_update',
+        type: data.type,
         yjsUpdate: data.yjsUpdate,
-        clockValue: null,
-        payload: null,
+        clockValue: data.clockValue,
+        payload: data.payload,
         afterId: null,
       })
       .returning();
