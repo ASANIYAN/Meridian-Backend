@@ -1,5 +1,6 @@
 import * as Y from 'yjs';
 import { YjsService } from './yjs.service';
+import { beforeEach, describe, expect, it } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 
 describe('YjsService', () => {
