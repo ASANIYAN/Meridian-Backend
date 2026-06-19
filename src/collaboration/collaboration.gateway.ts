@@ -257,28 +257,19 @@ export class CollaborationGateway
     }
 
     const snapshot = await this.snapshotsService.getLatestSnapshot(documentId);
-
-    if (!snapshot) {
-      client.send(
-        JSON.stringify({
-          event: 'initial_state',
-          data: { snapshot: null, operations: [] },
-        }),
-      );
-      return;
-    }
+    const afterSequence = snapshot?.operationSequence ?? 0;
 
     const operations = await this.operationsService.getOperationsSinceSequence(
       documentId,
-      snapshot.operationSequence,
+      afterSequence,
     );
 
     client.send(
       JSON.stringify({
         event: 'initial_state',
         data: {
-          snapshot: snapshot.contentBlob.toString('base64'),
-          operations,
+          snapshot: snapshot ? snapshot.contentBlob.toString('base64') : null,
+          delta: operations,
         },
       }),
     );
