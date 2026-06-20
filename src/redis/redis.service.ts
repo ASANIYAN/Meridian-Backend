@@ -15,24 +15,37 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   // blacklisting need a separate connection from subscribing.
   private readonly subscriber: RedisClientType;
 
+  private readonly host: string;
+
   constructor(private readonly configService: ConfigService) {
     const url = this.configService.getOrThrow<string>('REDIS_URL');
+    this.host = new URL(url).host;
 
-    this.client = createClient({ url });
+    this.client = createClient({
+      url,
+      socket: {
+        // Exponential backoff capped at 30 s; retries indefinitely.
+        reconnectStrategy: (retries) => Math.min(retries * 100, 30_000),
+      },
+    });
     // duplicate() creates a second connection sharing the same config, avoiding
     // the need to call createClient() again with the same URL.
     this.subscriber = this.client.duplicate();
 
     this.client.on('error', (error: Error) => {
-      this.logger.error(`Redis client error: ${error.message}`);
+      this.logger.error(
+        `Redis client error (host: ${this.host}): ${error.message}`,
+      );
     });
 
     this.subscriber.on('error', (error: Error) => {
-      this.logger.error(`Redis subscriber error: ${error.message}`);
+      this.logger.error(
+        `Redis subscriber error (host: ${this.host}): ${error.message}`,
+      );
     });
   }
 
-  // Opens both connections when the NestJS module starts up.
+  // Opens both connections and verifies reachability with PING when the module starts.
   async onModuleInit() {
     if (this.client.isOpen && this.subscriber.isOpen) {
       return;
@@ -40,7 +53,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
     await this.client.connect();
     await this.subscriber.connect();
-    this.logger.log('Redis client and subscriber connected');
+    await this.client.ping();
+    this.logger.log(
+      `Redis client and subscriber connected (host: ${this.host})`,
+    );
   }
 
   // Gracefully closes both connections on app shutdown so in-flight commands finish.
