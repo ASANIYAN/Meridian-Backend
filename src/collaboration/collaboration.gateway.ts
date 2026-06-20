@@ -420,6 +420,11 @@ export class CollaborationGateway
 
       if (room.size === 0) {
         this.roomsMap.delete(documentId);
+        if (this.subscribedChannels.has(documentId)) {
+          await this.redisService.unsubscribe(`doc:${documentId}`);
+          await this.redisService.unsubscribe(`presence:${documentId}`);
+          this.subscribedChannels.delete(documentId);
+        }
       }
     }
 
