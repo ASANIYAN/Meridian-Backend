@@ -25,4 +25,23 @@ export class SnapshotsService {
 
     return row?.snapshot ?? null;
   }
+
+  async createSnapshot(
+    documentId: string,
+    contentBlob: Buffer,
+    versionVector: Record<string, number>,
+    operationSequence: number,
+  ): Promise<void> {
+    await this.database.transaction(async (tx) => {
+      const [snapshot] = await tx
+        .insert(schema.snapshots)
+        .values({ documentId, contentBlob, versionVector, operationSequence })
+        .returning({ id: schema.snapshots.id });
+
+      await tx
+        .update(schema.documents)
+        .set({ latestSnapshotId: snapshot.id })
+        .where(eq(schema.documents.id, documentId));
+    });
+  }
 }

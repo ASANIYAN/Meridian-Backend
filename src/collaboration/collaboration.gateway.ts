@@ -23,6 +23,9 @@ import { OutboxService } from '../outbox/outbox.service';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { YjsService } from '../yjs/yjs.service';
+import { InjectQueue } from '@nestjs/bullmq';
+import { SNAPSHOT_JOB, SNAPSHOT_QUEUE } from '../snapshots/snapshot.queue';
+import { Queue } from 'bullmq';
 
 const port = Number(process.env.WS_PORT) || 8001;
 
@@ -68,6 +71,8 @@ export class CollaborationGateway
   private roomsMap: RoomsMap = new Map();
 
   constructor(
+    @InjectQueue(SNAPSHOT_QUEUE)
+    private readonly snapshotQueue: Queue,
     @Inject(DATABASE_CONNECTION)
     private readonly database: NodePgDatabase<typeof schema>,
     private readonly jwtService: JwtService,
@@ -439,12 +444,10 @@ export class CollaborationGateway
           30,
         );
         if (acquired) {
-          // This only signals that a snapshot is needed — the actual snapshot
-          // (replaying operations into a new compacted state) is built by a worker
-          // consuming this channel, not by this gateway.
-          await this.redisService.publish(
-            'snapshot:jobs',
-            Buffer.from(JSON.stringify({ documentId })),
+          await this.snapshotQueue.add(
+            SNAPSHOT_JOB,
+            { documentId },
+            { jobId: `snapshot:${documentId}` },
           );
         }
       }
