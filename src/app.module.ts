@@ -19,6 +19,7 @@ import { ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CollaborationModule } from './collaboration/collaboration.module';
 import { HttpOnlyThrottlerGuard } from './common/guards/http-only-throttler.guard';
+import { BullModule } from '@nestjs/bullmq';
 
 @Module({
   imports: [
@@ -29,19 +30,25 @@ import { HttpOnlyThrottlerGuard } from './common/guards/http-only-throttler.guar
         abortEarly: false,
       },
     }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: { url: config.getOrThrow('REDIS_URL') },
+      }),
+    }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: (config: ConfigService) => ({
         throttlers: [
           {
             name: 'default',
-            ttl: configService.getOrThrow<number>('THROTTLE_TTL_MS'),
-            limit: configService.getOrThrow<number>('THROTTLE_LIMIT'),
+            ttl: config.getOrThrow<number>('THROTTLE_TTL_MS'),
+            limit: config.getOrThrow<number>('THROTTLE_LIMIT'),
           },
           {
             name: 'auth',
-            ttl: configService.getOrThrow<number>('AUTH_THROTTLE_TTL_MS'),
-            limit: configService.getOrThrow<number>('AUTH_THROTTLE_LIMIT'),
+            ttl: config.getOrThrow<number>('AUTH_THROTTLE_TTL_MS'),
+            limit: config.getOrThrow<number>('AUTH_THROTTLE_LIMIT'),
           },
         ],
       }),
