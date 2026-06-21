@@ -18,6 +18,7 @@ export const envValidationSchema = Joi.object({
     .positive()
     .required(),
   PASSWORD_RESET_MAX_ATTEMPTS: Joi.number().integer().positive().required(),
+  OUTBOX_MAX_ATTEMPTS: Joi.number().integer().positive().required(),
   EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS: Joi.number()
     .integer()
     .positive()
