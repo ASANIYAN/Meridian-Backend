@@ -320,23 +320,33 @@ export class CollaborationGateway
         const received = BigInt(classified.receivedClock);
         const clockValue = (localClock > received ? localClock : received) + 1n;
 
-        const result = await this.operationsService.insertOperation(tx, {
-          documentId,
-          userId: client.user.userId,
-          yjsUpdate: update,
-          type: classified.type,
-          payload: classified.payload,
-          clockValue,
-        });
+        const opServiceResult = await this.operationsService.insertOperation(
+          tx,
+          {
+            documentId,
+            userId: client.user.userId,
+            yjsUpdate: update,
+            type: classified.type,
+            payload: classified.payload,
+            clockValue,
+          },
+        );
 
-        await this.outboxService.insertOutboxEntry(tx, {
+        const outboxId = await this.outboxService.insertOutboxEntry(tx, {
           documentId,
-          operationId: result.id,
+          operationId: opServiceResult.id,
           payload: update,
         });
 
+        const result = {
+          outboxId,
+          ...opServiceResult,
+        };
+
         return result;
       });
+
+      await this.outboxService.enqueueDelivery(opResult.outboxId);
 
       // Prefixing with instanceId lets this same instance's `doc:` subscriber (above)
       // recognize and ignore this broadcast when Redis echoes it back.
