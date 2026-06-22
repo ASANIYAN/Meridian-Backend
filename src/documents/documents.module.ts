@@ -11,9 +11,10 @@ import {
 import { DatabaseModule } from '../database/database.module';
 import { RedisService } from '../redis/redis.service';
 import { ShareLinksModule } from '../share_links/share_links.module';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
-  imports: [DatabaseModule, MembershipsModule, ShareLinksModule],
+  imports: [DatabaseModule, MembershipsModule, ShareLinksModule, AiModule],
   providers: [
     DocumentsService,
     DocumentExistsGuard,

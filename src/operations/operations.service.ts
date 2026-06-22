@@ -61,8 +61,8 @@ export class OperationsService {
       documentId: string;
       userId: string;
       yjsUpdate: Buffer;
-      type: 'insert' | 'delete' | 'format';
-      payload: Record<string, unknown>;
+      type: 'insert' | 'delete' | 'format' | 'yjs_update';
+      payload?: Record<string, unknown> | null;
       clockValue: bigint;
     },
   ) {

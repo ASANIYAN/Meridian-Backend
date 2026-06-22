@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { CollaborationGateway } from './collaboration.gateway';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from '../redis/redis.module';
@@ -8,6 +9,7 @@ import { OperationsModule } from '../operations/operations.module';
 import { OutboxModule } from '../outbox/outbox.module';
 import { DatabaseModule } from '../database/database.module';
 import { YjsModule } from '../yjs/yjs.module';
+import { SNAPSHOT_QUEUE } from '../snapshots/snapshot.queue';
 
 @Module({
   imports: [
@@ -19,6 +21,7 @@ import { YjsModule } from '../yjs/yjs.module';
     OutboxModule,
     DatabaseModule,
     YjsModule,
+    BullModule.registerQueue({ name: SNAPSHOT_QUEUE }),
   ],
   providers: [CollaborationGateway],
   controllers: [],
