@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -53,6 +54,10 @@ import { CreateShareLinkResponseDto } from '../share_links/dto/create-share-link
 import { RevokeShareLinkResponseDto } from '../share_links/dto/revoke-share-link-response.dto';
 import { ShareLinksService } from '../share_links/share_links.service';
 import { ClaimShareLinkResponseDataDto } from './dto/claim-share-link-response.dto';
+import { AiService } from '../ai/ai.service';
+import { AiValidationError } from '../ai/errors/ai-validation.error';
+import { ChatRequestDto } from '../ai/dto/chat-request.dto';
+import { ChatResponseDto } from '../ai/dto/chat-response.dto';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -60,6 +65,7 @@ export class DocumentsController {
   constructor(
     private readonly documentService: DocumentsService,
     private readonly sharelinksService: ShareLinksService,
+    private readonly aiService: AiService,
   ) {}
 
   @Get()
@@ -662,5 +668,65 @@ export class DocumentsController {
   })
   async deleteDocument(@Param('id') documentId: string): Promise<void> {
     await this.documentService.softDeleteDocument(documentId);
+  }
+
+  @Post(':id/chat')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Chat with document',
+    description:
+      'Accepts a natural language instruction from the document author, runs it through the AI pipeline, and applies the resulting operations to the document. Returns the number of operations applied. Only the document author may use this endpoint — editors and viewers receive 403.',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: ChatResponseDto,
+    description: 'AI instruction applied successfully.',
+    messageExample: 'Chat applied successfully.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'message field is missing or the LLM returned an unprocessable response.',
+    schema: errorResponseSchema(
+      400,
+      'LLM returned a non-JSON response',
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async chat(
+    @Param('id') documentId: string,
+    @Req() request: Request & { user: JwtPayload },
+    @Body() body: ChatRequestDto,
+  ): Promise<SuccessResponse<ChatResponseDto>> {
+    try {
+      const result = await this.aiService.chat(
+        documentId,
+        request.user.userId,
+        body.message,
+      );
+      return buildSuccessResponse('Chat applied successfully.', result);
+    } catch (error) {
+      if (error instanceof AiValidationError) {
+        throw new BadRequestException({ reason: error.reason });
+      }
+      throw error;
+    }
   }
 }

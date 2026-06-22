@@ -5,7 +5,7 @@ import { OutboxProcessor } from './outbox.processor';
 import { DatabaseModule } from '../database/database.module';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from '../redis/redis.module';
-import { BullModule, getQueueToken } from '@nestjs/bullmq';
+import { BullModule } from '@nestjs/bullmq';
 import { OUTBOX_QUEUE } from './outbox.queue';
 
 @Module({
@@ -17,6 +17,6 @@ import { OUTBOX_QUEUE } from './outbox.queue';
   ],
   controllers: [OutboxController],
   providers: [OutboxService, OutboxProcessor],
-  exports: [OutboxService, getQueueToken(OUTBOX_QUEUE)],
+  exports: [OutboxService],
 })
 export class OutboxModule {}
