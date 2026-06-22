@@ -34,4 +34,5 @@ export const envValidationSchema = Joi.object({
   GEMINI_MODEL: Joi.string().trim().default('gemini-2.5-flash'),
   AI_MAX_TOKENS: Joi.number().integer().positive().default(1000),
   AI_MAX_DOC_CHARS: Joi.number().integer().positive().default(60000),
+  AI_FUZZY_THRESHOLD: Joi.number().min(0).max(1).default(0.7),
 });

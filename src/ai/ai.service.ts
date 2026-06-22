@@ -216,7 +216,7 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
 
     let parsed: { scope_valid: boolean; violation_reason: string | null };
     try {
-      parsed = JSON.parse(raw) as {
+      parsed = JSON.parse(raw.trim()) as {
         scope_valid: boolean;
         violation_reason: string | null;
       };
@@ -326,7 +326,10 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
 
     // All ops were rejected by Check 2 — nothing left to apply or scope-check
     if (opsToApply.length === 0) {
-      return { operations_applied: 0, rejected_operations: rejectedOps };
+      return {
+        operations_applied: 0,
+        ...(rejectedOps.length > 0 && { rejected_operations: rejectedOps }),
+      };
     }
 
     // Check 3 — Scope: verify all remaining ops are related to the instruction
