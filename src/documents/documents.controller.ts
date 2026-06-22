@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -11,6 +12,7 @@ import {
   Post,
   Query,
   Req,
+  UnprocessableEntityException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,6 +24,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiUnauthorizedResponse,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { CreateDocumentDto } from './dto/create-document.dto';
 import { DocumentRecordResponseDto } from './dto/document-response.dto';
@@ -58,6 +61,8 @@ import { AiService } from '../ai/ai.service';
 import { AiValidationError } from '../ai/errors/ai-validation.error';
 import { ChatRequestDto } from '../ai/dto/chat-request.dto';
 import { ChatResponseDto } from '../ai/dto/chat-response.dto';
+import { AiContentExistenceError } from '../ai/errors/ai-content-existence.error';
+import { AiScopeError } from '../ai/errors/ai-scope.error';
 
 @ApiTags('Documents')
 @Controller('documents')
@@ -710,6 +715,24 @@ export class DocumentsController {
     description: 'Authenticated user is not the author of this document.',
     schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
   })
+  @ApiConflictResponse({
+    description:
+      'Check 2: fuzzy match — referenced text has changed, author confirmation required.',
+    schema: errorResponseSchema(
+      409,
+      'Check 2: fuzzy match — document may have changed',
+      'Conflict',
+    ),
+  })
+  @ApiUnprocessableEntityResponse({
+    description:
+      'Check 3: scope violation — operations exceed the scope of the instruction.',
+    schema: errorResponseSchema(
+      422,
+      'Operations exceed the scope of the instruction',
+      'Unprocessable Entity',
+    ),
+  })
   async chat(
     @Param('id') documentId: string,
     @Req() request: Request & { user: JwtPayload },
@@ -723,6 +746,20 @@ export class DocumentsController {
       );
       return buildSuccessResponse('Chat applied successfully.', result);
     } catch (error) {
+      if (error instanceof AiContentExistenceError) {
+        throw new ConflictException({
+          check: 'content_existence',
+          operation_index: error.operationIndex,
+          expected_text: error.expectedText,
+          actual_text: error.actualText,
+        });
+      }
+      if (error instanceof AiScopeError) {
+        throw new UnprocessableEntityException({
+          check: 'scope',
+          reason: error.reason,
+        });
+      }
       if (error instanceof AiValidationError) {
         throw new BadRequestException({ reason: error.reason });
       }
