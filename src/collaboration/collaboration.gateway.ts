@@ -327,6 +327,7 @@ export class CollaborationGateway
             userId: client.user.userId,
             yjsUpdate: update,
             type: classified.type,
+            source: 'human',
             payload: classified.payload,
             clockValue,
           },

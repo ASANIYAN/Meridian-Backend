@@ -62,6 +62,7 @@ export class OperationsService {
       userId: string;
       yjsUpdate: Buffer;
       type: 'insert' | 'delete' | 'format' | 'yjs_update';
+      source: 'human' | 'ai';
       payload?: Record<string, unknown> | null;
       clockValue: bigint;
     },
@@ -74,6 +75,7 @@ export class OperationsService {
         type: data.type,
         yjsUpdate: data.yjsUpdate,
         clockValue: data.clockValue,
+        source: data.source,
         payload: data.payload,
         afterId: null,
       })
