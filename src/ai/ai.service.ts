@@ -101,7 +101,7 @@ export class AiService {
       }
     }
 
-    // Diff from before the AI mutations — produces a single binary covering all changes
+    // Diff from before the AI mutations which produces a single binary covering all changes
     const yjsUpdate = Buffer.from(Y.encodeStateAsUpdate(doc, originalVector));
 
     // Persist as one yjs_update row + outbox entry, then enqueue delivery
