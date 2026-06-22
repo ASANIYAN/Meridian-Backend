@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import * as schema from '../database/schema';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { YjsService } from '../yjs/yjs.service';
@@ -21,9 +21,12 @@ type FormatOp = {
 };
 type AiOp = InsertOp | DeleteOp | FormatOp;
 
+const MAX_RETRIES = 2;
+
 @Injectable()
 export class AiService {
   private readonly genAI: GoogleGenerativeAI;
+  private readonly logger = new Logger(AiService.name);
 
   constructor(
     @Inject(DATABASE_CONNECTION)
@@ -37,6 +40,36 @@ export class AiService {
     this.genAI = new GoogleGenerativeAI(
       this.configService.getOrThrow<string>('GEMINI_API_KEY'),
     );
+  }
+
+  private truncateText(text: string): string {
+    const MAX_DOC_CHARS = this.configService.get<number>(
+      'AI_MAX_DOC_CHARS',
+      60_000,
+    );
+
+    if (text.length <= MAX_DOC_CHARS) return text;
+    const truncated = text.slice(0, MAX_DOC_CHARS);
+    return `${truncated}\n\n[Document truncated at ${MAX_DOC_CHARS} characters. Remaining content omitted.]`;
+  }
+
+  private async callLLM(userMessage: string, strict: boolean): Promise<string> {
+    const model = this.genAI.getGenerativeModel({
+      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash'),
+      systemInstruction: strict
+        ? this.buildStrictSystemPrompt()
+        : this.buildSystemPrompt(),
+      generationConfig: {
+        maxOutputTokens: this.configService.get<number>('AI_MAX_TOKENS', 1000),
+        responseMimeType: 'application/json',
+      },
+    });
+
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+    });
+
+    return result.response.text();
   }
 
   async chat(
@@ -63,35 +96,43 @@ export class AiService {
 
     // Capture state vector before AI mutations so Y.encodeStateAsUpdate can diff later
     const originalVector = Y.encodeStateVector(doc);
-    const currentText = this.yjsService.extractText(doc);
+    const currentText = this.truncateText(this.yjsService.extractText(doc));
+    const userMessage = this.buildUserMessage(currentText, message);
 
-    // Call Gemini
-    const model = this.genAI.getGenerativeModel({
-      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash'),
-      generationConfig: {
-        maxOutputTokens: this.configService.get<number>('AI_MAX_TOKENS', 1000),
-        responseMimeType: 'application/json',
-      },
-    });
+    let ops: AiOp[] | null = null;
 
-    const result = await model.generateContent(
-      this.buildPrompt(currentText, message),
-    );
-    const raw = result.response.text();
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const raw = await this.callLLM(userMessage, attempt > 0);
 
-    // Parse and validate — throws AiValidationError on bad shape
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new AiValidationError('LLM returned a non-JSON response');
+      try {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          throw new AiValidationError('LLM returned a non-JSON response');
+        }
+
+        ops = this.validateOperations(parsed);
+        break;
+      } catch (error) {
+        if (error instanceof AiValidationError) {
+          this.logger.error(
+            `AI format failure (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${error.reason}`,
+            raw,
+          );
+
+          if (attempt === MAX_RETRIES) {
+            throw new AiValidationError('AI response format invalid');
+          }
+        } else {
+          throw error;
+        }
+      }
     }
-
-    const ops = this.validateOperations(parsed);
 
     // Apply each op to the reconstructed Y.Doc
     const yjsText = doc.getText('content');
-    for (const op of ops) {
+    for (const op of ops!) {
       if (op.type === 'insert') {
         yjsText.insert(op.position, op.text);
       } else if (op.type === 'delete') {
@@ -132,22 +173,32 @@ export class AiService {
 
     await this.outboxService.enqueueDelivery(opResult.outboxId);
 
-    return { operations_applied: ops.length };
+    return { operations_applied: ops!.length };
   }
 
-  private buildPrompt(currentText: string, message: string): string {
-    return `You are an AI document editor. Return ONLY a valid JSON array with no markdown and no explanation.
+  private buildUserMessage(currentText: string, message: string): string {
+    return `Current document:\n${currentText}\n\nInstruction: ${message}`;
+  }
+
+  private buildSystemPrompt(): string {
+    return `You are an AI document editor. You MUST respond ONLY with a valid JSON array. No prose, no markdown, no explanation — JSON only.
 Each element must be one of these three shapes:
   { "type": "insert", "position": <number>, "text": <string> }
   { "type": "delete", "start": <number>, "end": <number> }
   { "type": "format", "start": <number>, "end": <number>, "attributes": <object> }
 Positions are 0-indexed character offsets in the current document text.
-For "delete" and "format", end must be greater than start.
+For "delete" and "format", end must be greater than start.`;
+  }
 
-Current document:
-${currentText}
-
-Instruction: ${message}`;
+  private buildStrictSystemPrompt(): string {
+    return `You are an AI document editor. Your previous response was rejected because it did not match the required format.
+You MUST return ONLY a raw JSON array. No text before it, no text after it, no markdown code fences, no explanation.
+The response must start with [ and end with ]. Any deviation will be rejected.
+Each element must be exactly one of:
+  { "type": "insert", "position": <number>, "text": <string> }
+  { "type": "delete", "start": <number>, "end": <number> }
+  { "type": "format", "start": <number>, "end": <number>, "attributes": <object> }
+Rules: positions are 0-indexed character offsets. For "delete" and "format", end must be greater than start. "text" must be a non-empty string.`;
   }
 
   private validateOperations(parsed: unknown): AiOp[] {
