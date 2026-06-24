@@ -269,8 +269,6 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
       }
     }
 
-    // Capture state vector before AI mutations so Y.encodeStateAsUpdate can diff later
-    const originalVector = Y.encodeStateVector(doc);
     const currentText = this.truncateText(this.yjsService.extractText(doc));
     const userMessage = this.buildUserMessage(currentText, message);
 
@@ -335,9 +333,12 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
     // Check 3 — Scope: verify all remaining ops are related to the instruction
     await this.checkScope(message, opsToApply);
 
+    const perOpBinaries: Buffer[] = [];
+
     // Apply each valid op to the reconstructed Y.Doc
     const yjsText = doc.getText('content');
     for (const op of opsToApply) {
+      const vectorBefore = Y.encodeStateVector(doc);
       if (op.type === 'insert') {
         yjsText.insert(op.position, op.text);
       } else if (op.type === 'delete') {
@@ -345,38 +346,43 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
       } else {
         yjsText.format(op.start, op.end - op.start, op.attributes);
       }
+
+      perOpBinaries.push(Buffer.from(Y.encodeStateAsUpdate(doc, vectorBefore)));
     }
 
-    // Diff from before the AI mutations which produces a single binary covering all changes
-    const yjsUpdate = Buffer.from(Y.encodeStateAsUpdate(doc, originalVector));
-
-    // Persist as one yjs_update row + outbox entry, then enqueue delivery
-    const opResult = await this.database.transaction(async (tx) => {
+    const outboxIds = await this.database.transaction(async (tx) => {
       await this.operationsService.acquireDocumentWriteLock(tx, documentId);
-      const maxClock = await this.operationsService.getMaxClockValue(
-        tx,
-        documentId,
-      );
+      let clock = await this.operationsService.getMaxClockValue(tx, documentId);
 
-      const op = await this.operationsService.insertOperation(tx, {
-        documentId,
-        userId,
-        yjsUpdate,
-        type: 'yjs_update',
-        payload: null,
-        clockValue: maxClock + 1n,
-      });
+      const ids: string[] = [];
+      for (const binary of perOpBinaries) {
+        clock += 1n;
+        const classified = this.yjsService.classifyUpdate(binary);
 
-      const outboxId = await this.outboxService.insertOutboxEntry(tx, {
-        documentId,
-        operationId: op.id,
-        payload: yjsUpdate,
-      });
+        const inserted = await this.operationsService.insertOperation(tx, {
+          documentId,
+          userId,
+          yjsUpdate: binary,
+          type: classified.type,
+          source: 'ai',
+          payload: classified.payload,
+          clockValue: clock,
+        });
 
-      return { outboxId };
+        const outboxId = await this.outboxService.insertOutboxEntry(tx, {
+          documentId,
+          operationId: inserted.id,
+          payload: binary,
+        });
+
+        ids.push(outboxId);
+      }
+      return ids;
     });
 
-    await this.outboxService.enqueueDelivery(opResult.outboxId);
+    for (const outboxId of outboxIds) {
+      await this.outboxService.enqueueDelivery(outboxId);
+    }
 
     return {
       operations_applied: opsToApply.length,

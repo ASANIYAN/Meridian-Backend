@@ -233,6 +233,7 @@ describe('OperationsService', () => {
       userId,
       yjsUpdate: Buffer.from('test-update'),
       type: 'insert' as const,
+      source: 'human' as const,
       payload: { content: 'hello' },
       clockValue: 5n,
     };
@@ -243,6 +244,7 @@ describe('OperationsService', () => {
         documentId,
         userId,
         type: 'insert' as const,
+        source: 'human' as const,
         yjsUpdate: Buffer.from('test-update'),
         afterId: null,
         operationSequence: 1,

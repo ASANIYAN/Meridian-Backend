@@ -22,6 +22,9 @@ export const operationTypeEnum = pgEnum('operation_type', [
   'yjs_update',
 ]);
 
+// who generated the operation
+export const operationSourceEnum = pgEnum('operation_source', ['human', 'ai']);
+
 export const operations = pgTable(
   'operations',
   {
@@ -51,6 +54,8 @@ export const operations = pgTable(
 
     // Lamport timestamp for causal ordering
     clockValue: bigint('clock_value', { mode: 'bigint' }),
+
+    source: operationSourceEnum('source').notNull().default('human'),
 
     // Polymorphic payload (validated via Zod); null for yjs_update rows
     payload: jsonb('payload'),
