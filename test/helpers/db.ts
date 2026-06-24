@@ -2,6 +2,7 @@ import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 import * as schema from '../../src/database/schema';
+import { createClient } from 'redis';
 
 let pool: Pool | null = null;
 let db: ReturnType<typeof drizzle<typeof schema>> | null = null;
@@ -35,4 +36,13 @@ export async function closeDb(): Promise<void> {
     pool = null;
     db = null;
   }
+}
+
+// Flushes the entire test Redis DB so throttle counters and blacklisted tokens
+// don't bleed between tests. Only call this in the test environment.
+export async function flushRedis(): Promise<void> {
+  const client = createClient({ url: process.env.REDIS_URL });
+  await client.connect();
+  await client.flushDb();
+  await client.quit();
 }

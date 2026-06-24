@@ -1,4 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UsersService } from './users.service';
 import {
   ApiBearerAuth,
@@ -14,6 +15,7 @@ import {
   type SuccessResponse,
 } from '../common/responses/success-response';
 
+@Throttle({ default: {} })
 @ApiTags('Users')
 @ApiBearerAuth('access-token')
 @Controller('users')

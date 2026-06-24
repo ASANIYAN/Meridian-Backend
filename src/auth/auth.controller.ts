@@ -14,7 +14,7 @@ import {
 } from '../common/responses/success-response';
 import { Public } from './decorators/public.decorator';
 import { Request } from 'express';
-import { AuthRateLimit } from '../common/rate-limit/decorators/auth-rate-limit.decorator';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -43,6 +43,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @Throttle({ auth: { limit: 10, ttl: 3_600_000 } })
   @Post('signup')
   @ApiOperation({
     summary: 'Create an account',
@@ -130,7 +131,7 @@ export class AuthController {
   }
 
   @Public()
-  @AuthRateLimit()
+  @Throttle({ auth: {} })
   @Post('resend-verification-email')
   @ApiOperation({
     summary: 'Resend verification email',
@@ -173,7 +174,7 @@ export class AuthController {
   }
 
   @Public()
-  @AuthRateLimit()
+  @Throttle({ auth: {} })
   @Post('login')
   @ApiOperation({
     summary: 'Log in',
@@ -226,7 +227,7 @@ export class AuthController {
   }
 
   @Public()
-  @AuthRateLimit()
+  @Throttle({ auth: { limit: 3, ttl: 3_600_000 } })
   @Post('forgot-password')
   @ApiOperation({
     summary: 'Start password reset',
@@ -269,7 +270,7 @@ export class AuthController {
   }
 
   @Public()
-  @AuthRateLimit()
+  @Throttle({ auth: {} })
   @Post('reset-password')
   @ApiOperation({
     summary: 'Reset password',

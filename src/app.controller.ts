@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from './auth/decorators/public.decorator';
 import { RootResponseDto } from './app/dto/root-response.dto';
+import { SkipThrottle } from '@nestjs/throttler';
 
 @ApiTags('System')
 @Controller()
@@ -10,6 +11,7 @@ export class AppController {
   constructor(private readonly configService: ConfigService) {}
 
   @Public()
+  @SkipThrottle()
   @Get()
   @ApiOperation({
     summary: 'Get service status',
@@ -26,5 +28,17 @@ export class AppController {
       service: 'Meridian-Backend',
       port: this.configService.getOrThrow<number>('PORT'),
     };
+  }
+
+  @Public()
+  @SkipThrottle()
+  @Get('health')
+  @ApiOperation({
+    summary: 'Health check',
+    description: 'Liveness probe — never rate limited.',
+  })
+  @ApiOkResponse({ description: 'Service is healthy.' })
+  getHealth() {
+    return { status: 'ok', timestamp: new Date().toISOString() };
   }
 }
