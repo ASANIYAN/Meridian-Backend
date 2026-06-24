@@ -1,5 +1,6 @@
 import * as schema from '../database/schema';
 import { Inject, Logger, OnApplicationShutdown } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
@@ -40,6 +41,9 @@ type AuthenticatedSocket = WebSocket & {
   // await this first, since NestJS binds the message listener before handleConnection's
   // async auth work finishes.
   authReady: Promise<void>;
+  messageCount: number;
+  consecutiveViolations: number;
+  windowTimer: NodeJS.Timeout | undefined;
 };
 
 type RoomsMap = Map<string, Set<AuthenticatedSocket>>;
@@ -56,6 +60,8 @@ export class CollaborationGateway
   server: WebSocket.Server | undefined;
 
   private readonly logger = new Logger(CollaborationGateway.name);
+  private readonly wsConnectionRateLimit: number;
+  private readonly wsMessageRateLimit: number;
   // Max operations allowed to accumulate since the last snapshot before a worker compacts them.
   private readonly SNAPSHOT_THRESHOLD = 50;
   // Unique per-process id, prefixed onto every Redis-published frame so a process can
@@ -82,7 +88,15 @@ export class CollaborationGateway
     private readonly operationsService: OperationsService,
     private readonly outboxService: OutboxService,
     private readonly yjsService: YjsService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.wsConnectionRateLimit = this.configService.getOrThrow<number>(
+      'WS_CONNECTION_RATE_LIMIT',
+    );
+    this.wsMessageRateLimit = this.configService.getOrThrow<number>(
+      'WS_MESSAGE_RATE_LIMIT',
+    );
+  }
   afterInit(_server: WebSocket.Server) {
     this.logger.log('WebSocket server initialized');
     this.healthCheckInterval = setInterval(() => {
@@ -90,6 +104,12 @@ export class CollaborationGateway
         `Active WebSocket connections: ${this.server?.clients.size}`,
       );
     }, 30_000);
+  }
+
+  private extractIp(request: IncomingMessage): string {
+    const forwarded = request.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
+    return request.socket.remoteAddress ?? 'unknown';
   }
 
   private extractToken(request: IncomingMessage): string | null {
@@ -140,6 +160,18 @@ export class CollaborationGateway
     authClient.authReady.catch(() => {});
 
     try {
+      const ip = this.extractIp(request);
+      const [hits] = await this.redisService.throttleIncrement(
+        `ws:conn:rate:${ip}`,
+        60_000,
+      );
+      if (hits > this.wsConnectionRateLimit) {
+        this.logger.warn(`WS connection rate limit exceeded - ip=${ip}`);
+        client.close(4029, 'Connection rate limit exceeded');
+        settleAuth(new Error('Connection rate limit exceeded'));
+        return;
+      }
+
       const token = this.extractToken(request);
       const payload = await this.verifyJwt(token);
 
@@ -261,6 +293,25 @@ export class CollaborationGateway
       }
     }
 
+    client.messageCount = 0;
+    client.consecutiveViolations = 0;
+    client.windowTimer = setInterval(() => {
+      const wasViolation = client.messageCount > this.wsMessageRateLimit;
+      client.messageCount = 0;
+      if (wasViolation) {
+        client.consecutiveViolations++;
+        if (client.consecutiveViolations >= 3) {
+          clearInterval(client.windowTimer);
+          this.logger.warn(
+            `WS message rate limit: 3 consecutive violations - user_id=${client.user.userId} document_id=${client.user.documentId}`,
+          );
+          client.close(4029, 'Message rate limit exceeded');
+        }
+      } else {
+        client.consecutiveViolations = 0;
+      }
+    }, 1_000);
+
     const snapshot = await this.snapshotsService.getLatestSnapshot(documentId);
     const afterSequence = snapshot?.operationSequence ?? 0;
 
@@ -301,6 +352,22 @@ export class CollaborationGateway
     const documentId = client.user.documentId;
     if (!documentId) {
       return;
+    }
+
+    if (typeof client.messageCount === 'number') {
+      client.messageCount++;
+      if (client.messageCount === this.wsMessageRateLimit + 1) {
+        this.logger.warn(
+          `WS message rate limit warning - user_id=${client.user.userId} document_id=${documentId}`,
+        );
+        client.send(
+          JSON.stringify({
+            event: 'rate_limit_warning',
+            data: { message: 'Message rate limit exceeded' },
+          }),
+        );
+      }
+      if (client.messageCount > this.wsMessageRateLimit) return;
     }
 
     const update = Buffer.isBuffer(data) ? data : Buffer.from(data);
@@ -407,6 +474,11 @@ export class CollaborationGateway
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
+    if (client.windowTimer) {
+      clearInterval(client.windowTimer);
+      client.windowTimer = undefined;
+    }
+
     if (!client.user) {
       this.logger.log('Unauthenticated client disconnected.');
       return;

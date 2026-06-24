@@ -36,4 +36,6 @@ export const envValidationSchema = Joi.object({
   AI_MAX_DOC_CHARS: Joi.number().integer().positive().default(60000),
   AI_FUZZY_THRESHOLD: Joi.number().min(0).max(1).default(0.7),
   AI_REQUESTS_PER_MINUTE: Joi.number().integer().positive().required(),
+  WS_CONNECTION_RATE_LIMIT: Joi.number().integer().positive().required(),
+  WS_MESSAGE_RATE_LIMIT: Joi.number().integer().positive().required(),
 });
