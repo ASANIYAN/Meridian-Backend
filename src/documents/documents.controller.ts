@@ -15,6 +15,7 @@ import {
   UnprocessableEntityException,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -64,6 +65,7 @@ import { ChatResponseDto } from '../ai/dto/chat-response.dto';
 import { AiContentExistenceError } from '../ai/errors/ai-content-existence.error';
 import { AiScopeError } from '../ai/errors/ai-scope.error';
 
+@Throttle({ default: {} })
 @ApiTags('Documents')
 @Controller('documents')
 export class DocumentsController {
@@ -675,6 +677,7 @@ export class DocumentsController {
     await this.documentService.softDeleteDocument(documentId);
   }
 
+  @Throttle({ default: {}, 'ai-chat': {} })
   @Post(':id/chat')
   @HttpCode(HttpStatus.OK)
   @UseGuards(

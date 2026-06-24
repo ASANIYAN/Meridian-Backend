@@ -14,6 +14,7 @@ import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { MailModule } from './mail/mail.module';
 import { RedisModule } from './redis/redis.module';
+import { RedisThrottlerStorage } from './redis/redis-throttler.storage';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -36,9 +37,12 @@ import { BullModule } from '@nestjs/bullmq';
         connection: { url: config.getOrThrow('REDIS_URL') },
       }),
     }),
+    RedisModule,
     ThrottlerModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
+      imports: [RedisModule],
+      inject: [ConfigService, RedisThrottlerStorage],
+      useFactory: (config: ConfigService, storage: RedisThrottlerStorage) => ({
+        storage,
         throttlers: [
           {
             name: 'default',
@@ -49,6 +53,11 @@ import { BullModule } from '@nestjs/bullmq';
             name: 'auth',
             ttl: config.getOrThrow<number>('AUTH_THROTTLE_TTL_MS'),
             limit: config.getOrThrow<number>('AUTH_THROTTLE_LIMIT'),
+          },
+          {
+            name: 'ai-chat',
+            ttl: 60_000,
+            limit: config.getOrThrow<number>('AI_REQUESTS_PER_MINUTE'),
           },
         ],
       }),
@@ -64,7 +73,6 @@ import { BullModule } from '@nestjs/bullmq';
     OutboxModule,
     AuthModule,
     MailModule,
-    RedisModule,
     CollaborationModule,
   ],
   controllers: [AppController],

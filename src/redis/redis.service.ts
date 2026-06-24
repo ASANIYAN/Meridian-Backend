@@ -115,6 +115,25 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return result === 'OK';
   }
 
+  // Atomically increments a counter key, setting a TTL (ms) on the first hit.
+  // Returns [hitCount, remainingTtlMs] from a Lua script so both ops are atomic.
+  async throttleIncrement(
+    key: string,
+    ttlMs: number,
+  ): Promise<[number, number]> {
+    const script = `
+      local c = redis.call('INCR', KEYS[1])
+      if c == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+      return {c, redis.call('PTTL', KEYS[1])}
+    `;
+    const raw = await this.client.eval(script, {
+      keys: [key],
+      arguments: [String(ttlMs)],
+    });
+    const result = raw as unknown as [number, number];
+    return [Number(result[0]), Number(result[1])];
+  }
+
   private getBlacklistKey(jti: string) {
     return `auth:blacklist:${jti}`;
   }
