@@ -9,7 +9,7 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
 async function bootstrap() {
   const logger = new Logger('Boot');
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('v1');
+  app.setGlobalPrefix('v1', { exclude: ['health'] });
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
   app.useWebSocketAdapter(new WsAdapter(app));

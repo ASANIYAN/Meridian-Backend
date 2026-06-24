@@ -29,16 +29,4 @@ export class AppController {
       port: this.configService.getOrThrow<number>('PORT'),
     };
   }
-
-  @Public()
-  @SkipThrottle()
-  @Get('health')
-  @ApiOperation({
-    summary: 'Health check',
-    description: 'Liveness probe — never rate limited.',
-  })
-  @ApiOkResponse({ description: 'Service is healthy.' })
-  getHealth() {
-    return { status: 'ok', timestamp: new Date().toISOString() };
-  }
 }

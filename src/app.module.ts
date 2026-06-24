@@ -20,6 +20,7 @@ import { ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { CollaborationModule } from './collaboration/collaboration.module';
 import { HttpOnlyThrottlerGuard } from './common/guards/http-only-throttler.guard';
+import { HealthModule } from './health/health.module';
 import { BullModule } from '@nestjs/bullmq';
 
 @Module({
@@ -74,6 +75,7 @@ import { BullModule } from '@nestjs/bullmq';
     AuthModule,
     MailModule,
     CollaborationModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [

@@ -83,6 +83,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.subscriber.unsubscribe(channel);
   }
 
+  async ping(): Promise<void> {
+    await this.client.ping();
+  }
+
   // Adds a JWT ID to the revocation list with an expiry matching the token's remaining TTL.
   // Skipped if ttlSeconds <= 0 — the token is already expired, no need to store it.
   async blacklistToken(jti: string, ttlSeconds: number) {
