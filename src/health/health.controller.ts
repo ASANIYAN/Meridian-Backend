@@ -1,9 +1,9 @@
-import { Controller, Get, Inject } from '@nestjs/common';
-import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
+import { Controller, Get, Inject, Res } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Public } from '../auth/decorators/public.decorator';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { RedisService } from '../redis/redis.service';
@@ -15,29 +15,34 @@ import * as schema from '../database/schema';
 @Controller('health')
 export class HealthController {
   constructor(
-    private readonly health: HealthCheckService,
     @Inject(DATABASE_CONNECTION)
     private readonly db: NodePgDatabase<typeof schema>,
     private readonly redis: RedisService,
   ) {}
 
   @Get()
-  @HealthCheck()
   @ApiOperation({
     summary: 'Health check',
     description:
-      'Returns database and Redis availability. Used by load balancers and monitoring tools.',
+      'Probes PostgreSQL (SELECT 1) and Redis (PING). Returns 200 when both pass, 503 with failed checks identified when either fails.',
   })
-  check() {
-    return this.health.check([
-      async () => {
-        await this.db.execute(sql`SELECT 1`);
-        return { database: { status: 'up' as const } };
-      },
-      async () => {
-        await this.redis.ping();
-        return { redis: { status: 'up' as const } };
-      },
+  async check(@Res({ passthrough: true }) res: Response) {
+    const checks: { database: string; redis: string } = {
+      database: 'up',
+      redis: 'up',
+    };
+
+    await Promise.allSettled([
+      this.db.execute(sql`SELECT 1`).catch(() => {
+        checks.database = 'down';
+      }),
+      this.redis.ping().catch(() => {
+        checks.redis = 'down';
+      }),
     ]);
+
+    const healthy = checks.database === 'up' && checks.redis === 'up';
+    res.status(healthy ? 200 : 503);
+    return { status: healthy ? 'ok' : 'error', checks };
   }
 }

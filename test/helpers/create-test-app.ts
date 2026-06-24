@@ -19,7 +19,7 @@ export async function createTestApp(): Promise<{
     .compile();
 
   const app = moduleRef.createNestApplication();
-  app.setGlobalPrefix('v1');
+  app.setGlobalPrefix('v1', { exclude: ['health'] });
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
   app.useWebSocketAdapter(new WsAdapter(app));
 
