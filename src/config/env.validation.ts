@@ -1,6 +1,9 @@
 import * as Joi from 'joi';
 
 export const envValidationSchema = Joi.object({
+  NODE_ENV: Joi.string()
+    .valid('development', 'test', 'production')
+    .default('development'),
   DB_URL: Joi.string().trim().required(),
   REDIS_URL: Joi.string().uri().required(),
   PORT: Joi.number().port().default(8000),
