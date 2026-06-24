@@ -3,23 +3,25 @@ import * as path from 'path';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env.test') });
 
-// Override with low limits before the NestJS module compiles so ConfigService
-// picks them up during ThrottlerModule.forRootAsync initialization.
-process.env.AUTH_THROTTLE_LIMIT = '3';
-process.env.AUTH_THROTTLE_TTL_MS = '5000';
-process.env.THROTTLE_LIMIT = '5';
-process.env.THROTTLE_TTL_MS = '5000';
-process.env.AI_REQUESTS_PER_MINUTE = '2';
-
 import request from 'supertest';
 import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { WsAdapter } from '@nestjs/platform-ws';
+import { getOptionsToken } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
 import { MailService } from '../src/mail/mail.service';
 import { AiService } from '../src/ai/ai.service';
+import { RedisThrottlerStorage } from '../src/redis/redis-throttler.storage';
 import { MockMailService } from './helpers/mock-mail.service';
 import { truncateAll, flushRedis } from './helpers/db';
+
+// Low limits injected directly via DI so the guard sees them immediately,
+// without relying on process.env overrides and ConfigModule timing.
+const TEST_THROTTLERS = [
+  { name: 'default', ttl: 5_000, limit: 5 },
+  { name: 'auth', ttl: 5_000, limit: 3 },
+  { name: 'ai-chat', ttl: 60_000, limit: 2 },
+];
 
 async function createRateLimitTestApp(): Promise<{
   app: INestApplication;
@@ -33,6 +35,14 @@ async function createRateLimitTestApp(): Promise<{
     .overrideProvider(AiService)
     .useValue({
       chat: jest.fn().mockResolvedValue({ operations_applied: 0 }),
+    })
+    .overrideProvider(getOptionsToken())
+    .useFactory({
+      inject: [RedisThrottlerStorage],
+      factory: (storage: RedisThrottlerStorage) => ({
+        storage,
+        throttlers: TEST_THROTTLERS,
+      }),
     })
     .compile();
 
@@ -139,11 +149,11 @@ describe('Rate limiting (e2e)', () => {
   // --- Per-user authenticated throttling ---
 
   it('two authenticated users from the same IP are throttled independently', async () => {
-    // Create two users. Both requests come from the same supertest IP (127.0.0.1).
+    // Both users' requests arrive from the same supertest IP (127.0.0.1).
     const tokenA = await createVerifiedUser('user-a@test.com');
     const tokenB = await createVerifiedUser('user-b@test.com');
 
-    // Exhaust user A's default throttle (THROTTLE_LIMIT = 5)
+    // Exhaust user A's default throttle (limit = 5)
     for (let i = 0; i < 5; i++) {
       await request(app.getHttpServer())
         .get('/v1/users')
@@ -154,7 +164,7 @@ describe('Rate limiting (e2e)', () => {
       .set('Authorization', `Bearer ${tokenA}`);
     expect(resA.status).toBe(429);
 
-    // User B's counter is separate — should still get through
+    // User B has a separate counter keyed by their own user_id — still succeeds
     const resB = await request(app.getHttpServer())
       .get('/v1/users')
       .set('Authorization', `Bearer ${tokenB}`);
@@ -187,7 +197,7 @@ describe('Rate limiting (e2e)', () => {
     const docA = await createDocument(token, 'Doc A');
     const docB = await createDocument(token, 'Doc B');
 
-    // Exhaust limit on docA
+    // Exhaust limit on docA (limit = 2)
     for (let i = 0; i < 2; i++) {
       await request(app.getHttpServer())
         .post(`/v1/documents/${docA}/chat`)
@@ -200,7 +210,7 @@ describe('Rate limiting (e2e)', () => {
       .send({ message: 'hello' });
     expect(throttledRes.status).toBe(429);
 
-    // docB has its own counter and should still succeed
+    // docB has its own counter — should still succeed
     const docBRes = await request(app.getHttpServer())
       .post(`/v1/documents/${docB}/chat`)
       .set('Authorization', `Bearer ${token}`)
@@ -211,7 +221,6 @@ describe('Rate limiting (e2e)', () => {
   // --- Health check exclusion ---
 
   it('GET /health is never rate limited even when other limits are exhausted', async () => {
-    // Exhaust the auth throttle via login attempts
     for (let i = 0; i < 3; i++) {
       await request(app.getHttpServer())
         .post('/v1/auth/login')

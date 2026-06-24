@@ -15,7 +15,7 @@ import {
   UnprocessableEntityException,
   UseGuards,
 } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -65,6 +65,7 @@ import { ChatResponseDto } from '../ai/dto/chat-response.dto';
 import { AiContentExistenceError } from '../ai/errors/ai-content-existence.error';
 import { AiScopeError } from '../ai/errors/ai-scope.error';
 
+@SkipThrottle({ auth: true })
 @Throttle({ default: {} })
 @ApiTags('Documents')
 @Controller('documents')

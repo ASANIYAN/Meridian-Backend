@@ -7,7 +7,7 @@ import request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { createTestApp } from './helpers/create-test-app';
 import { MockMailService } from './helpers/mock-mail.service';
-import { truncateAll } from './helpers/db';
+import { truncateAll, flushRedis } from './helpers/db';
 
 describe('Documents (e2e)', () => {
   let app: INestApplication;
@@ -19,6 +19,7 @@ describe('Documents (e2e)', () => {
 
   afterEach(async () => {
     await truncateAll();
+    await flushRedis();
     mockMail.clear();
   });
 
