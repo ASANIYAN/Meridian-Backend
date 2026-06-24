@@ -13,18 +13,21 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
   async increment(
     key: string,
     ttl: number,
-    _limit: number,
+    limit: number,
     _blockDuration: number,
     _throttlerName: string,
   ): Promise<ThrottlerStorageRecord> {
     const [totalHits, remainingTtlMs] =
       await this.redisService.throttleIncrement(key, ttl);
 
+    const timeToExpire = Math.max(0, remainingTtlMs);
+    const isBlocked = totalHits > limit;
+
     return {
       totalHits,
-      timeToExpire: Math.max(0, remainingTtlMs),
-      isBlocked: false,
-      timeToBlockExpire: 0,
+      timeToExpire,
+      isBlocked,
+      timeToBlockExpire: isBlocked ? timeToExpire : 0,
     };
   }
 }

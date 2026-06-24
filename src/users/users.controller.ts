@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { Throttle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { UsersService } from './users.service';
 import {
   ApiBearerAuth,
@@ -15,6 +15,7 @@ import {
   type SuccessResponse,
 } from '../common/responses/success-response';
 
+@SkipThrottle({ auth: true, 'ai-chat': true })
 @Throttle({ default: {} })
 @ApiTags('Users')
 @ApiBearerAuth('access-token')
