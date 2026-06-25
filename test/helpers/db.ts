@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as schema from '../../src/database/schema';
 import { createClient } from 'redis';
 
@@ -28,6 +28,26 @@ export async function truncateAll(): Promise<void> {
       users
     RESTART IDENTITY CASCADE
   `);
+}
+
+export async function getUserIdByEmail(email: string): Promise<string> {
+  const [row] = await getDb()
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.email, email));
+  return row.id;
+}
+
+// Memberships have no HTTP create endpoint (they're created on document creation or via
+// share-link claim), so e2e tests seed extra members directly.
+export async function addMembership(
+  documentId: string,
+  userId: string,
+  role: 'author' | 'editor' | 'viewer',
+): Promise<void> {
+  await getDb()
+    .insert(schema.memberships)
+    .values({ documentId, userId, role, membershipMode: 'invite' });
 }
 
 export async function closeDb(): Promise<void> {

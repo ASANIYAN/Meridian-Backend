@@ -14,7 +14,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   // A subscribed Redis connection can't issue other commands, so publishing and
   // blacklisting need a separate connection from subscribing.
   private readonly subscriber: RedisClientType;
-
+  private readonly PRESENCE_TTL = 12 * 60 * 60;
   private readonly host: string;
 
   constructor(private readonly configService: ConfigService) {
@@ -136,6 +136,96 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     });
     const result = raw as unknown as [number, number];
     return [Number(result[0]), Number(result[1])];
+  }
+
+  // Records one more live connection for this user on a document and returns the
+  // user's resulting total connection count across the whole cluster. A return of 1
+  // means this is the user's first connection (they just became present); anything
+  // higher means they were already present on another tab/instance. Refreshes the TTL
+  // on both presence keys so an active room never lets its presence state expire.
+  async presenceJoin(documentId: string, userId: string): Promise<number> {
+    const n = await this.client.hIncrBy(
+      this.getPresenceCountKey(documentId),
+      userId,
+      1,
+    );
+    await this.client.expire(
+      this.getPresenceCountKey(documentId),
+      this.PRESENCE_TTL,
+    );
+    await this.client.expire(
+      this.getPresenceIdentityKey(documentId),
+      this.PRESENCE_TTL,
+    );
+
+    return n;
+  }
+
+  // Stores the display name shown in the roster for a present user. Called once, on a
+  // user's first connection, so the identity hash's fields stay in lockstep with the
+  // set of currently-present users.
+  async setPresenceIdentity(
+    documentId: string,
+    userId: string,
+    name: string,
+  ): Promise<void> {
+    await this.client.hSet(
+      this.getPresenceIdentityKey(documentId),
+      userId,
+      name,
+    );
+    await this.client.expire(
+      this.getPresenceIdentityKey(documentId),
+      this.PRESENCE_TTL,
+    );
+  }
+
+  // Removes one live connection for this user. Returns the user's remaining connection
+  // count and, when that reaches 0 (their last connection closed, so they are no longer
+  // present), the display name to announce as offline. The decrement, the identity read,
+  // and the cleanup of both keys run as one Lua script so a reconnect landing mid-leave
+  // can't corrupt the count or strand an identity field.
+  async presenceLeave(
+    documentId: string,
+    userId: string,
+  ): Promise<{ remaining: number; name: string | null }> {
+    const script = `
+      local n = redis.call('HINCRBY', KEYS[1], ARGV[1], -1)
+      if n <= 0 then
+        local name = redis.call('HGET', KEYS[2], ARGV[1])
+        redis.call('HDEL', KEYS[1], ARGV[1])
+        redis.call('HDEL', KEYS[2], ARGV[1])
+        return {0, name}
+      end
+      return {n, false}
+    `;
+    const raw = (await this.client.eval(script, {
+      keys: [
+        this.getPresenceCountKey(documentId),
+        this.getPresenceIdentityKey(documentId),
+      ],
+      arguments: [userId],
+    })) as [number, string | null | boolean];
+
+    // The Lua `false` (no name; user still present) comes back as either null or false
+    // depending on the RESP protocol version, so anything non-string normalizes to null.
+    const name = typeof raw[1] === 'string' ? raw[1] : null;
+    return { remaining: Number(raw[0]), name };
+  }
+
+  // The live roster for a document as a { userId: displayName } map — exactly the set
+  // of users currently present, since identity fields are added on first join and
+  // removed on last leave.
+  async presenceRoster(documentId: string): Promise<Record<string, string>> {
+    return this.client.hGetAll(this.getPresenceIdentityKey(documentId));
+  }
+
+  private getPresenceCountKey(documentId: string) {
+    return `presence:doc:${documentId}:count`;
+  }
+
+  private getPresenceIdentityKey(documentId: string) {
+    return `presence:doc:${documentId}:identity`;
   }
 
   private getBlacklistKey(jti: string) {
