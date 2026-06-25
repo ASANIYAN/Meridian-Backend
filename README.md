@@ -8,18 +8,18 @@ Meridian is a NestJS backend for collaborative document editing. Multiple users 
 
 ## Tech Stack
 
-| Category       | Library / Version                                   |
-| -------------- | --------------------------------------------------- |
-| Framework      | NestJS 11, TypeScript 5.7                           |
-| Database       | PostgreSQL 16 · Drizzle ORM 0.45 · drizzle-kit 0.31 |
-| Cache / Queue  | Redis 5.12 · BullMQ 5.79                            |
-| Real-time sync | Yjs 13.6 · `@nestjs/platform-ws` 11                 |
-| Auth           | Passport-JWT 4 · `@nestjs/jwt` 11                   |
-| AI             | `@google/generative-ai` 0.24 (Gemini 2.5 Flash)     |
-| Email          | `@nestjs-modules/mailer` 2.3 (SMTP)                 |
-| Rate limiting  | `@nestjs/throttler` 6 backed by Redis               |
-| API docs       | Swagger / OpenAPI (`@nestjs/swagger` 11)            |
-| Testing        | Jest 30 · Supertest 7                               |
+| Category       | Library                                    |
+| -------------- | ------------------------------------------ |
+| Framework      | NestJS, TypeScript                         |
+| Database       | PostgreSQL · Drizzle ORM · drizzle-kit     |
+| Cache / Queue  | Redis · BullMQ                             |
+| Real-time sync | Yjs · `@nestjs/platform-ws`                |
+| Auth           | Passport-JWT · `@nestjs/jwt`               |
+| AI             | `@google/generative-ai` (Gemini 2.5 Flash) |
+| Email          | `@nestjs-modules/mailer` (SMTP)            |
+| Rate limiting  | `@nestjs/throttler` backed by Redis        |
+| API docs       | Swagger / OpenAPI (`@nestjs/swagger`)      |
+| Testing        | Jest · Supertest                           |
 
 ## Architecture
 
