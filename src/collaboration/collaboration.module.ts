@@ -4,6 +4,7 @@ import { CollaborationGateway } from './collaboration.gateway';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from '../redis/redis.module';
 import { MembershipsModule } from '../memberships/memberships.module';
+import { UsersModule } from '../users/users.module';
 import { SnapshotsModule } from '../snapshots/snapshots.module';
 import { OperationsModule } from '../operations/operations.module';
 import { OutboxModule } from '../outbox/outbox.module';
@@ -16,6 +17,7 @@ import { SNAPSHOT_QUEUE } from '../snapshots/snapshot.queue';
     ConfigModule,
     RedisModule,
     MembershipsModule,
+    UsersModule,
     SnapshotsModule,
     OperationsModule,
     OutboxModule,

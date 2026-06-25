@@ -18,6 +18,7 @@ import WebSocket from 'ws';
 import { RedisService } from '../redis/redis.service';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { MembershipsService } from '../memberships/memberships.service';
+import { UsersService } from '../users/users.service';
 import { SnapshotsService } from '../snapshots/snapshots.service';
 import { OperationsService } from '../operations/operations.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -44,6 +45,9 @@ type AuthenticatedSocket = WebSocket & {
   messageCount: number;
   consecutiveViolations: number;
   windowTimer: NodeJS.Timeout | undefined;
+  // Set only once a presenceJoin increment has actually been recorded for this socket,
+  // so handleDisconnect never decrements a count for a join that failed before counting.
+  presenceCounted?: boolean;
 };
 
 type RoomsMap = Map<string, Set<AuthenticatedSocket>>;
@@ -84,6 +88,7 @@ export class CollaborationGateway
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
     private readonly membershipService: MembershipsService,
+    private readonly usersService: UsersService,
     private readonly snapshotsService: SnapshotsService,
     private readonly operationsService: OperationsService,
     private readonly outboxService: OutboxService,
@@ -268,13 +273,16 @@ export class CollaborationGateway
           },
         );
 
-        // Same relay pattern as above, for presence (online/offline) events instead of edits.
+        // Same relay pattern as above, for presence (online/offline) events instead of
+        // edits. Decoded to a string so it leaves as a WebSocket text frame: every binary
+        // frame the client receives is therefore a Yjs document update and every text
+        // frame is JSON, so the provider never has to content-sniff to tell them apart.
         await this.redisService.subscribe(
           `presence:${documentId}`,
           (frame: Buffer) => {
             if (frame.subarray(0, 16).equals(this.instanceId)) return;
 
-            const payload = frame.subarray(16);
+            const payload = frame.subarray(16).toString('utf8');
             const room = this.roomsMap.get(documentId);
             room?.forEach((socket) => {
               if (socket.readyState === WebSocket.OPEN) {
@@ -312,6 +320,41 @@ export class CollaborationGateway
       }
     }, 1_000);
 
+    // Record this connection in the cluster-wide presence count. Done after the room
+    // and Redis channels are set up so a failure above never leaves a counted-but-dead
+    // connection behind. presenceCounted gates the matching decrement in handleDisconnect.
+    const connectionCount = await this.redisService.presenceJoin(
+      documentId,
+      client.user.userId,
+    );
+    client.presenceCounted = true;
+
+    // Only the user's first connection flips them to "present" — announce it once, and
+    // resolve their display name (a single lookup, not per-reconnect) for the roster.
+    if (connectionCount === 1) {
+      const user = await this.usersService.getUserById(client.user.userId);
+      const displayName =
+        `${user.firstName} ${user.lastName}`.trim() || client.user.email;
+      await this.redisService.setPresenceIdentity(
+        documentId,
+        client.user.userId,
+        displayName,
+      );
+      await this.broadcastPresence(
+        documentId,
+        this.roomsMap.get(documentId),
+        client.user.userId,
+        displayName,
+        'online',
+        client,
+      );
+    }
+
+    // The current { userId: displayName } roster, sent to the joining client so it can
+    // render who is already present without a separate request. Includes this user;
+    // the client filters its own id out.
+    const participants = await this.redisService.presenceRoster(documentId);
+
     const snapshot = await this.snapshotsService.getLatestSnapshot(documentId);
     const afterSequence = snapshot?.operationSequence ?? 0;
 
@@ -326,6 +369,7 @@ export class CollaborationGateway
         data: {
           snapshot: snapshot ? snapshot.contentBlob.toString('base64') : null,
           delta: operations,
+          participants,
         },
       }),
     );
@@ -452,24 +496,29 @@ export class CollaborationGateway
     documentId: string,
     room: Set<AuthenticatedSocket> | undefined,
     userId: string,
-    status: 'offline',
+    name: string,
+    status: 'online' | 'offline',
+    exclude?: AuthenticatedSocket,
   ) {
-    const payload = Buffer.from(
-      JSON.stringify({ type: 'presence', userId, status }),
-    );
+    // Presence is sent as a JSON text frame (not a binary buffer) so the client can rely
+    // on frame type alone: binary => Yjs document update, text => JSON event. No sniffing.
+    const message = JSON.stringify({ type: 'presence', userId, name, status });
 
     // Send to clients on this instance directly first — no need to wait on a Redis
-    // round trip for the common case where they're all on the same process.
+    // round trip for the common case where they're all on the same process. The
+    // triggering socket (e.g. the user who just joined) is skipped via `exclude`.
     room?.forEach((socket) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(payload);
+      if (socket !== exclude && socket.readyState === WebSocket.OPEN) {
+        socket.send(message);
       }
     });
 
     // Then publish for other instances' rooms, since `room` here is only ever local.
+    // The instanceId prefix is binary, so the frame is carried as bytes over pub/sub and
+    // decoded back to a text frame by the subscriber before it reaches a client.
     await this.redisService.publish(
       `presence:${documentId}`,
-      Buffer.concat([this.instanceId, payload]),
+      Buffer.concat([this.instanceId, Buffer.from(message)]),
     );
   }
 
@@ -494,12 +543,26 @@ export class CollaborationGateway
     if (room) {
       // Delete before broadcasting so the loop only reaches clients still in the room.
       room.delete(client);
-      await this.broadcastPresence(
-        documentId,
-        room,
-        client.user.userId,
-        'offline',
-      );
+
+      // Decrement this user's cluster-wide connection count. Only announce offline when
+      // their last connection closed (remaining === 0); other tabs/instances keep them
+      // present. Guarded by presenceCounted so a join that failed before counting (and
+      // thus never incremented) can't drive the count negative here.
+      if (client.presenceCounted) {
+        const { remaining, name } = await this.redisService.presenceLeave(
+          documentId,
+          client.user.userId,
+        );
+        if (remaining === 0) {
+          await this.broadcastPresence(
+            documentId,
+            room,
+            client.user.userId,
+            name ?? client.user.email,
+            'offline',
+          );
+        }
+      }
 
       if (room.size === 0) {
         this.roomsMap.delete(documentId);
