@@ -40,6 +40,11 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const port = configService.getOrThrow<number>('PORT');
 
+  app.enableCors({
+    origin: configService.getOrThrow<string>('APP_URL'),
+    credentials: true,
+  });
+
   await app.listen(port);
 
   logger.log('App Boot Successful');
