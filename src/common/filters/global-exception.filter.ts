@@ -7,15 +7,37 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { AiContentExistenceError } from '../../ai/errors/ai-content-existence.error';
+import { AiScopeError } from '../../ai/errors/ai-scope.error';
+import { AiValidationError } from '../../ai/errors/ai-validation.error';
 
 const PG_UNIQUE_VIOLATION = '23505';
 const PG_FOREIGN_KEY_VIOLATION = '23503';
 const PG_NOT_NULL_VIOLATION = '23502';
 
-interface ErrorShape {
+interface ErrorBody {
   statusCode: number;
   message: string | string[];
   error: string;
+  [key: string]: unknown;
+}
+
+// Human-readable reason phrases. HttpStatus[status] yields SCREAMING_SNAKE_CASE
+// (e.g. 'NOT_FOUND'), which doesn't match the 'Not Found' style the rest of the API
+// and the Swagger examples use, so map the statuses we emit explicitly.
+const REASON_PHRASES: Record<number, string> = {
+  [HttpStatus.BAD_REQUEST]: 'Bad Request',
+  [HttpStatus.UNAUTHORIZED]: 'Unauthorized',
+  [HttpStatus.FORBIDDEN]: 'Forbidden',
+  [HttpStatus.NOT_FOUND]: 'Not Found',
+  [HttpStatus.CONFLICT]: 'Conflict',
+  [HttpStatus.UNPROCESSABLE_ENTITY]: 'Unprocessable Entity',
+  [HttpStatus.TOO_MANY_REQUESTS]: 'Too Many Requests',
+  [HttpStatus.INTERNAL_SERVER_ERROR]: 'Internal Server Error',
+};
+
+function reasonPhrase(status: number): string {
+  return REASON_PHRASES[status] ?? 'Error';
 }
 
 function isPgConstraintError(err: unknown): err is { code: string } {
@@ -28,7 +50,7 @@ function isPgConstraintError(err: unknown): err is { code: string } {
   );
 }
 
-function classifyPgError(code: string): ErrorShape {
+function classifyPgError(code: string): ErrorBody {
   switch (code) {
     case PG_UNIQUE_VIOLATION:
       return {
@@ -66,25 +88,23 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const { statusCode, message, error } = this.classify(exception);
+    const body = this.classify(exception);
 
-    if (statusCode >= 500) {
+    if (body.statusCode >= 500) {
       this.logger.error(
-        `${request.method} ${request.url} → ${statusCode}`,
+        `${request.method} ${request.url} → ${body.statusCode}`,
         exception instanceof Error ? exception.stack : String(exception),
       );
     }
 
-    response.status(statusCode).json({
-      statusCode,
-      message,
-      error,
+    response.status(body.statusCode).json({
+      ...body,
       timestamp: new Date().toISOString(),
       path: request.url,
     });
   }
 
-  private classify(exception: unknown): ErrorShape {
+  private classify(exception: unknown): ErrorBody {
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
       const res = exception.getResponse();
@@ -93,15 +113,52 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         return {
           statusCode: status,
           message: res,
-          error: HttpStatus[status] ?? 'Error',
+          error: reasonPhrase(status),
         };
       }
 
-      const body = res as Record<string, unknown>;
+      // Preserve any structured fields the thrown exception attached (ValidationPipe
+      // message arrays, and our own domain detail objects) instead of collapsing the
+      // body to message/error and dropping the rest.
+      const attached = res as Record<string, unknown>;
       return {
+        error: reasonPhrase(status),
+        message: exception.message,
+        ...attached,
         statusCode: status,
-        message: (body.message as string | string[]) ?? exception.message,
-        error: (body.error as string) ?? HttpStatus[status] ?? 'Error',
+      };
+    }
+
+    // Domain errors from the AI pipeline are translated here so the chat handler stays a
+    // plain call → response, and the structured detail fields reach the client intact.
+    if (exception instanceof AiContentExistenceError) {
+      return {
+        statusCode: HttpStatus.CONFLICT,
+        error: reasonPhrase(HttpStatus.CONFLICT),
+        message: 'Referenced text has changed; author confirmation required',
+        check: 'content_existence',
+        operation_index: exception.operationIndex,
+        expected_text: exception.expectedText,
+        actual_text: exception.actualText,
+      };
+    }
+
+    if (exception instanceof AiScopeError) {
+      return {
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        error: reasonPhrase(HttpStatus.UNPROCESSABLE_ENTITY),
+        message: exception.reason,
+        check: 'scope',
+        reason: exception.reason,
+      };
+    }
+
+    if (exception instanceof AiValidationError) {
+      return {
+        statusCode: HttpStatus.BAD_REQUEST,
+        error: reasonPhrase(HttpStatus.BAD_REQUEST),
+        message: exception.reason,
+        reason: exception.reason,
       };
     }
 
