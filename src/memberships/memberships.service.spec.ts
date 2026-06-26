@@ -259,19 +259,12 @@ describe('MembershipsService', () => {
     };
 
     it('throws ConflictException when the user is already a member', async () => {
-      const existingMembership = {
-        id: 'membership-1',
-        documentId: 'doc-1',
-        userId: 'user-1',
-        role: 'viewer',
-        membershipMode: 'link',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const where = jest.fn().mockResolvedValue([existingMembership]);
-      const from = jest.fn().mockReturnValue({ where });
-      database.select.mockReturnValue({ from });
+      // onConflictDoNothing fires on the (documentId, userId) unique constraint:
+      // the insert returns an empty array.
+      const returning = jest.fn().mockResolvedValue([]);
+      const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
+      const values = jest.fn().mockReturnValue({ onConflictDoNothing });
+      database.insert.mockReturnValue({ values });
 
       await expect(
         service.addMemberViaLink('doc-1', 'user-1', 'viewer'),
@@ -279,11 +272,6 @@ describe('MembershipsService', () => {
     });
 
     it('creates a membership with membershipMode "link" and the correct role', async () => {
-      // getUserDocumentMembership → no existing membership
-      const where = jest.fn().mockResolvedValue([]);
-      const from = jest.fn().mockReturnValue({ where });
-      database.select.mockReturnValue({ from });
-
       usersService.getUserById.mockResolvedValue(user);
 
       const memberRow = {
@@ -296,7 +284,8 @@ describe('MembershipsService', () => {
         updatedAt: new Date(),
       };
       const returning = jest.fn().mockResolvedValue([memberRow]);
-      const values = jest.fn().mockReturnValue({ returning });
+      const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
+      const values = jest.fn().mockReturnValue({ onConflictDoNothing });
       database.insert.mockReturnValue({ values });
 
       const result = await service.addMemberViaLink(

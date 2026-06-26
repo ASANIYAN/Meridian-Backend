@@ -377,8 +377,8 @@ export class CollaborationGateway
 
   @SubscribeMessage('update')
   async handleUpdate(
-    client: AuthenticatedSocket,
-    data: Buffer | number[],
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: Buffer | number[],
   ): Promise<void> {
     // Same guard as handleJoin: wait for handleConnection to finish before reading
     // client.user.
@@ -460,13 +460,13 @@ export class CollaborationGateway
 
       await this.outboxService.enqueueDelivery(opResult.outboxId);
 
-      // Prefixing with instanceId lets this same instance's `doc:` subscriber (above)
-      // recognize and ignore this broadcast when Redis echoes it back.
-      await this.redisService.publish(
-        `doc:${documentId}`,
-        Buffer.concat([this.instanceId, update]),
-      );
-
+      // Cross-instance and durable fan-out flow through the transactional outbox enqueued
+      // above: the outbox processor publishes to `doc:${documentId}`, and every instance
+      // subscribed to this document relays that frame into its local room. We still hand the
+      // update to this instance's own connected peers directly for low-latency local
+      // delivery; the matching outbox frame this instance later receives re-applies the same
+      // Yjs update, which is an idempotent no-op. (A single inline publish here is avoided so
+      // a redis hiccup can't drop the broadcast — the outbox retries until delivered.)
       const room = this.roomsMap.get(documentId);
       room?.forEach((socket) => {
         if (socket !== client) {

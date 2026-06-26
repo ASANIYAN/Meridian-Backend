@@ -166,6 +166,9 @@ npm run test:cov
 ```
 
 E2E tests require `.env.test` to be configured and a running Postgres + Redis instance.
+They run serially (`--runInBand`): the suites share a WebSocket port and the test
+database, so running them in parallel causes port conflicts and cross-suite data races.
+`npm run test:e2e:ci` is an alias for the same command.
 
 ## Project Structure
 
