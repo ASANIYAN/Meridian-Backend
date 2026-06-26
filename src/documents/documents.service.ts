@@ -63,6 +63,12 @@ export class DocumentsService {
     page: number,
     limit: number,
   ): Promise<PaginatedResult<DocumentWithRole>> {
+    // Shared predicate for the page query and its count so the two can't drift.
+    const membershipFilter = and(
+      eq(schema.memberships.userId, userId),
+      ne(schema.documents.status, 'deleted'),
+    );
+
     const documentWithRole = await this.database
       .select({
         ...getTableColumns(schema.documents),
@@ -73,12 +79,7 @@ export class DocumentsService {
         schema.documents,
         eq(schema.memberships.documentId, schema.documents.id),
       )
-      .where(
-        and(
-          eq(schema.memberships.userId, userId),
-          ne(schema.documents.status, 'deleted'),
-        ),
-      )
+      .where(membershipFilter)
       .orderBy(desc(schema.documents.updatedAt))
       .limit(limit)
       .offset((page - 1) * limit);
@@ -90,12 +91,7 @@ export class DocumentsService {
         schema.documents,
         eq(schema.memberships.documentId, schema.documents.id),
       )
-      .where(
-        and(
-          eq(schema.memberships.userId, userId),
-          ne(schema.documents.status, 'deleted'),
-        ),
-      );
+      .where(membershipFilter);
     const total = Number(count[0].count);
 
     const totalPages = Math.ceil(total / limit);
@@ -221,20 +217,27 @@ export class DocumentsService {
   }
 
   async claimShareLink(documentId: string, token: string, userId: string) {
-    const link = await this.sharelinksService.findAndValidateLink(
-      documentId,
-      token,
-    );
+    // Validate, add the membership, and mark a single-use link claimed as one atomic
+    // unit so a concurrent claimer can't slip between validation and claim. The link
+    // is validated with a row lock (FOR UPDATE) inside this transaction, so two
+    // simultaneous claims of the same single-use link serialize and the loser is
+    // rejected when it re-reads the now-claimed row.
+    const membership = await this.database.transaction(async (tx) => {
+      const link = await this.sharelinksService.findAndValidateLink(
+        documentId,
+        token,
+        tx,
+      );
 
-    const membership = await this.database.transaction(async () => {
       const member = await this.membershipsService.addMemberViaLink(
         documentId,
         userId,
         link.role as 'editor' | 'viewer',
+        tx,
       );
 
       if (link.isSingleUse) {
-        await this.sharelinksService.markLinkAsClaimed(link.id, userId);
+        await this.sharelinksService.markLinkAsClaimed(link.id, userId, tx);
       }
 
       return member;

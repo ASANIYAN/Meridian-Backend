@@ -121,19 +121,12 @@ export class MembershipsService {
     documentId: string,
     userId: string,
     role: 'editor' | 'viewer',
+    db: NodePgDatabase<typeof schema> = this.database,
   ) {
-    const documentMembership = await this.getUserDocumentMembership(
-      documentId,
-      userId,
-    );
-
-    if (documentMembership) {
-      throw new ConflictException('User is already a member of this document.');
-    }
-
-    const user = await this.usersService.getUserById(userId);
-
-    const [member] = await this.database
+    // Insert-or-nothing against the (documentId, userId) unique constraint instead of a
+    // check-then-insert: this is atomic, so two concurrent claims by the same user can't
+    // both create a membership — exactly one insert wins and the other gets no row back.
+    const [member] = await db
       .insert(schema.memberships)
       .values({
         documentId,
@@ -141,7 +134,14 @@ export class MembershipsService {
         role,
         membershipMode: 'link',
       })
+      .onConflictDoNothing()
       .returning();
+
+    if (!member) {
+      throw new ConflictException('User is already a member of this document.');
+    }
+
+    const user = await this.usersService.getUserById(userId);
 
     return {
       id: user.id,

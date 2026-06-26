@@ -6,6 +6,16 @@ import { Job, Queue } from 'bullmq';
 import { OutboxService } from './outbox.service';
 import { RedisService } from '../redis/redis.service';
 
+// The `doc:` channel subscriber (CollaborationGateway) treats the first 16 bytes of
+// every frame as an instance-id header: it skips frames whose header matches its own
+// id (its own echoed broadcasts) and strips the header before relaying the rest. Outbox
+// deliveries don't originate from a live gateway instance, so they carry a 16-byte zero
+// header. A real instance id is a random UUID and can never be all-zero, so no instance
+// mistakes an outbox frame for its own echo, and the subscriber still strips exactly 16
+// bytes to recover the raw Yjs update. Without this header the subscriber would strip 16
+// bytes of actual payload and relay a corrupted update.
+const OUTBOX_FRAME_HEADER = Buffer.alloc(16);
+
 @Processor(OUTBOX_QUEUE)
 export class OutboxProcessor extends WorkerHost {
   private readonly logger = new Logger(OutboxProcessor.name);
@@ -57,7 +67,7 @@ export class OutboxProcessor extends WorkerHost {
 
       await this.redisService.publish(
         `doc:${outboxRow.documentId}`,
-        outboxRow.payload,
+        Buffer.concat([OUTBOX_FRAME_HEADER, outboxRow.payload]),
       );
 
       await this.outboxService.deleteRow(outboxId);

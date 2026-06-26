@@ -88,8 +88,12 @@ export class ShareLinksService {
     throw new BadRequestException('Link is already revoked.');
   }
 
-  async findAndValidateLink(documentId: string, token: string) {
-    const [link] = await this.database
+  async findAndValidateLink(
+    documentId: string,
+    token: string,
+    db: NodePgDatabase<typeof schema> = this.database,
+  ) {
+    const [link] = await db
       .select()
       .from(schema.shareLinks)
       .where(
@@ -98,7 +102,13 @@ export class ShareLinksService {
           eq(schema.shareLinks.token, token),
         ),
       )
-      .limit(1);
+      .limit(1)
+      // Lock the link row for the duration of the enclosing transaction so two
+      // concurrent claims of the same single-use link serialize: the second waits
+      // here, then reads the row the first already marked claimed and is rejected
+      // below. Outside a transaction (the default executor) this locks only for the
+      // single statement, which is harmless.
+      .for('update');
 
     if (!link) {
       throw new NotFoundException('Link not found');
@@ -119,8 +129,12 @@ export class ShareLinksService {
     return link;
   }
 
-  async markLinkAsClaimed(linkId: string, userId: string) {
-    await this.database
+  async markLinkAsClaimed(
+    linkId: string,
+    userId: string,
+    db: NodePgDatabase<typeof schema> = this.database,
+  ) {
+    await db
       .update(schema.shareLinks)
       .set({
         claimedBy: userId,

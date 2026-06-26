@@ -75,23 +75,35 @@ export class AiService {
     return `${truncated}\n\n[Document truncated at ${MAX_DOC_CHARS} characters. Remaining content omitted.]`;
   }
 
-  private async callLLM(userMessage: string, strict: boolean): Promise<string> {
+  // Single place that talks to Gemini: builds a JSON-mode model with the given system
+  // instruction and token budget, sends one user turn, and returns the raw text.
+  private async generateJson(
+    systemInstruction: string,
+    userText: string,
+    maxOutputTokens: number,
+  ): Promise<string> {
     const model = this.genAI.getGenerativeModel({
       model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash'),
-      systemInstruction: strict
-        ? this.buildStrictSystemPrompt()
-        : this.buildSystemPrompt(),
+      systemInstruction,
       generationConfig: {
-        maxOutputTokens: this.configService.get<number>('AI_MAX_TOKENS', 1000),
+        maxOutputTokens,
         responseMimeType: 'application/json',
       },
     });
 
     const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+      contents: [{ role: 'user', parts: [{ text: userText }] }],
     });
 
     return result.response.text();
+  }
+
+  private async callLLM(userMessage: string, strict: boolean): Promise<string> {
+    return this.generateJson(
+      strict ? this.buildStrictSystemPrompt() : this.buildSystemPrompt(),
+      userMessage,
+      this.configService.get<number>('AI_MAX_TOKENS', 1000),
+    );
   }
 
   private levenshtein(a: string, b: string): number {
@@ -181,34 +193,19 @@ export class AiService {
       })
       .join('\n');
 
-    const model = this.genAI.getGenerativeModel({
-      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash'),
-      systemInstruction: `You are a scope validator for an AI document editor.
+    const systemInstruction = `You are a scope validator for an AI document editor.
 Determine if ALL proposed changes are directly and exclusively related to the given instruction.
 Return ONLY valid JSON: { "scope_valid": boolean, "violation_reason": string | null }
 scope_valid must be true only if every single change is directly required by the instruction.
-If even one change is unrelated or goes beyond the instruction, scope_valid must be false.`,
-      generationConfig: {
-        maxOutputTokens: 200,
-        responseMimeType: 'application/json',
-      },
-    });
+If even one change is unrelated or goes beyond the instruction, scope_valid must be false.`;
 
     let raw: string;
     try {
-      const result = await model.generateContent({
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `Instruction: "${instruction}"\n\nProposed changes:\n${opSummaries}`,
-              },
-            ],
-          },
-        ],
-      });
-      raw = result.response.text();
+      raw = await this.generateJson(
+        systemInstruction,
+        `Instruction: "${instruction}"\n\nProposed changes:\n${opSummaries}`,
+        200,
+      );
     } catch (err) {
       this.logger.warn('Scope check LLM call failed; skipping Check 3', err);
       return;

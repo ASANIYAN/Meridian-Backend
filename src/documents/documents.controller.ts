@@ -1,7 +1,5 @@
 import {
-  BadRequestException,
   Body,
-  ConflictException,
   Controller,
   Delete,
   Get,
@@ -12,7 +10,6 @@ import {
   Post,
   Query,
   Req,
-  UnprocessableEntityException,
   UseGuards,
 } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
@@ -59,11 +56,8 @@ import { RevokeShareLinkResponseDto } from '../share_links/dto/revoke-share-link
 import { ShareLinksService } from '../share_links/share_links.service';
 import { ClaimShareLinkResponseDataDto } from './dto/claim-share-link-response.dto';
 import { AiService } from '../ai/ai.service';
-import { AiValidationError } from '../ai/errors/ai-validation.error';
 import { ChatRequestDto } from '../ai/dto/chat-request.dto';
 import { ChatResponseDto } from '../ai/dto/chat-response.dto';
-import { AiContentExistenceError } from '../ai/errors/ai-content-existence.error';
-import { AiScopeError } from '../ai/errors/ai-scope.error';
 
 @SkipThrottle({ auth: true })
 @Throttle({ default: {} })
@@ -742,32 +736,11 @@ export class DocumentsController {
     @Req() request: Request & { user: JwtPayload },
     @Body() body: ChatRequestDto,
   ): Promise<SuccessResponse<ChatResponseDto>> {
-    try {
-      const result = await this.aiService.chat(
-        documentId,
-        request.user.userId,
-        body.message,
-      );
-      return buildSuccessResponse('Chat applied successfully.', result);
-    } catch (error) {
-      if (error instanceof AiContentExistenceError) {
-        throw new ConflictException({
-          check: 'content_existence',
-          operation_index: error.operationIndex,
-          expected_text: error.expectedText,
-          actual_text: error.actualText,
-        });
-      }
-      if (error instanceof AiScopeError) {
-        throw new UnprocessableEntityException({
-          check: 'scope',
-          reason: error.reason,
-        });
-      }
-      if (error instanceof AiValidationError) {
-        throw new BadRequestException({ reason: error.reason });
-      }
-      throw error;
-    }
+    const result = await this.aiService.chat(
+      documentId,
+      request.user.userId,
+      body.message,
+    );
+    return buildSuccessResponse('Chat applied successfully.', result);
   }
 }

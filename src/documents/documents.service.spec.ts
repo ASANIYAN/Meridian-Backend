@@ -431,8 +431,8 @@ describe('DocumentsService', () => {
       const link = { id: 'link-1', role: 'editor', isSingleUse: false };
       shareLinksService.findAndValidateLink.mockResolvedValue(link);
       membershipsService.addMemberViaLink.mockResolvedValue(member);
-      database.transaction.mockImplementation((fn: () => Promise<unknown>) =>
-        fn(),
+      database.transaction.mockImplementation(
+        (fn: (tx: unknown) => Promise<unknown>) => fn('tx'),
       );
       setupGetDocumentById();
 
@@ -446,8 +446,8 @@ describe('DocumentsService', () => {
       shareLinksService.findAndValidateLink.mockResolvedValue(link);
       membershipsService.addMemberViaLink.mockResolvedValue(member);
       shareLinksService.markLinkAsClaimed.mockResolvedValue(undefined);
-      database.transaction.mockImplementation((fn: () => Promise<unknown>) =>
-        fn(),
+      database.transaction.mockImplementation(
+        (fn: (tx: unknown) => Promise<unknown>) => fn('tx'),
       );
       setupGetDocumentById();
 
@@ -460,6 +460,7 @@ describe('DocumentsService', () => {
       expect(shareLinksService.markLinkAsClaimed).toHaveBeenCalledWith(
         'link-1',
         'user-2',
+        'tx',
       );
       expect(result).toEqual({ membership: member, document: documentRow });
     });
