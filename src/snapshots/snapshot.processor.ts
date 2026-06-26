@@ -15,6 +15,9 @@ import { YjsService } from '../yjs/yjs.service';
 @Processor(SNAPSHOT_QUEUE)
 export class SnapshotProcessor extends WorkerHost {
   private readonly logger = new Logger(SnapshotProcessor.name);
+  // Cadence of the periodic fallback sweep that fans out a snapshot job per document,
+  // catching any document that never crossed the disconnect-time threshold.
+  private readonly SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
   constructor(
     @Inject(DATABASE_CONNECTION)
@@ -34,7 +37,7 @@ export class SnapshotProcessor extends WorkerHost {
     await this.queue.add(
       SNAPSHOT_JOB,
       { documentId: 'ALL' },
-      { repeat: { every: 5 * 60 * 1000 } },
+      { repeat: { every: this.SWEEP_INTERVAL_MS } },
     );
   }
 
