@@ -104,8 +104,15 @@ Starts Postgres 16 on `:5432` and Redis on `:6379`.
 4. **Run migrations**
 
 ```bash
-npm run drizzle:push
+npm run drizzle:migrate
 ```
+
+Schema changes follow a generate → migrate flow: edit the Drizzle schema, run
+`npm run drizzle:generate` to produce a SQL migration in `drizzle/`, commit it,
+then apply it with `npm run drizzle:migrate`. Run `drizzle:migrate` in every
+environment (including after pulling new migrations) to keep the database in
+sync. The e2e test database is rebuilt from the schema via `drizzle-kit push`
+on each run, so it needs no manual migration.
 
 5. **Start the server**
 

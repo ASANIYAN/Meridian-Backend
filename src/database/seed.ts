@@ -5,6 +5,7 @@ import { eq, sql, type AnyColumn } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { hashSync } from 'bcryptjs';
+import * as Y from 'yjs';
 import { envValidationSchema } from '../config/env.validation';
 import {
   documents,
@@ -80,6 +81,15 @@ const seedMembershipIds = {
   launchPlanEditor: '50505050-5050-4050-8050-505050505050',
   launchPlanViewer: '60606060-6060-4060-8060-606060606060',
 };
+
+// Snapshots store a real Yjs binary update (encodeStateAsUpdate), not arbitrary
+// JSON. The snapshot worker and the join flow replay this blob via Y.applyUpdate,
+// which throws on anything that isn't a valid Yjs update.
+function buildContentBlob(text: string): Buffer {
+  const doc = new Y.Doc();
+  doc.getText('content').insert(0, text);
+  return Buffer.from(Y.encodeStateAsUpdate(doc));
+}
 
 function getRequiredMapValue<TValue>(
   map: Map<string, TValue>,
@@ -334,14 +344,10 @@ async function seedDatabase() {
             ? '88888888-8888-4888-8888-888888888881'
             : '99999999-9999-4999-8999-999999999991',
         documentId: document.id,
-        contentBlob: Buffer.from(
-          JSON.stringify({
-            title: document.title,
-            body:
-              index === 0
-                ? 'A concise product brief for local development.'
-                : 'A practical launch checklist for local development.',
-          }),
+        contentBlob: buildContentBlob(
+          index === 0
+            ? 'A concise product brief for local development.'
+            : 'A practical launch checklist for local development.',
         ),
         versionVector: {
           author: getRequiredMapValue(latestSequenceByDocumentId, document.id),
