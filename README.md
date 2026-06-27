@@ -88,7 +88,7 @@ SMTP_PASS=
 
 # Gemini
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.5-flash
 ```
 
 See `.env.example` for the full list of optional tuning variables (rate limits, snapshot thresholds, share-link TTL, etc.).

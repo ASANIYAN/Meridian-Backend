@@ -2,7 +2,7 @@ import * as Y from 'yjs';
 import * as schema from '../database/schema';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GenerationConfig, GoogleGenerativeAI } from '@google/generative-ai';
 import { YjsService } from '../yjs/yjs.service';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { SnapshotsService } from '../snapshots/snapshots.service';
@@ -83,12 +83,18 @@ export class AiService {
     maxOutputTokens: number,
   ): Promise<string> {
     const model = this.genAI.getGenerativeModel({
-      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash'),
+      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-3.5-flash'),
       systemInstruction,
       generationConfig: {
         maxOutputTokens,
         responseMimeType: 'application/json',
-      },
+        // Flash is a thinking model: its reasoning tokens count against
+        // maxOutputTokens and were consuming the whole budget, truncating the
+        // JSON mid-output. This is deterministic extraction, so turn thinking
+        // off. thinkingConfig isn't in the legacy SDK's GenerationConfig type
+        // but is forwarded verbatim to the REST API.
+        thinkingConfig: { thinkingBudget: 0 },
+      } as GenerationConfig,
     });
 
     const result = await model.generateContent({
