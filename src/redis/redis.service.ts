@@ -119,6 +119,51 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return result === 'OK';
   }
 
+  // Stages an AI edit proposal under proposal:{id} with an expiry. The value is the
+  // JSON-serialized proposal; the key's TTL is the entire cleanup mechanism — if the
+  // author never accepts or declines, Redis drops it on its own.
+  async stageProposal(
+    proposalId: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<void> {
+    await this.client.set(this.getProposalKey(proposalId), value, {
+      expiration: { type: 'EX', value: ttlSeconds },
+    });
+  }
+
+  // Reads a staged proposal without consuming it, refreshing its TTL so a proposal
+  // that has to bounce through a re-confirmation step doesn't expire mid-review.
+  // Returns null if the key is missing or already expired.
+  async peekProposal(
+    proposalId: string,
+    ttlSeconds: number,
+  ): Promise<string | null> {
+    const key = this.getProposalKey(proposalId);
+    const value = await this.client.get(key);
+    if (value !== null) {
+      await this.client.expire(key, ttlSeconds);
+    }
+    return value;
+  }
+
+  // Atomically reads and deletes a proposal. This is the exactly-once gate for accept:
+  // only the caller that gets a non-null result owns the proposal and may apply it, so
+  // two racing accepts can never double-apply the staged operations.
+  async consumeProposal(proposalId: string): Promise<string | null> {
+    return this.client.getDel(this.getProposalKey(proposalId));
+  }
+
+  // Discards a staged proposal. Idempotent — deleting an already-gone key is a no-op,
+  // which is exactly what decline wants.
+  async deleteProposal(proposalId: string): Promise<void> {
+    await this.client.del(this.getProposalKey(proposalId));
+  }
+
+  private getProposalKey(proposalId: string) {
+    return `proposal:${proposalId}`;
+  }
+
   // Atomically increments a counter key, setting a TTL (ms) on the first hit.
   // Returns [hitCount, remainingTtlMs] from a Lua script so both ops are atomic.
   async throttleIncrement(
