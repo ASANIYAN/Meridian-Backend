@@ -363,12 +363,21 @@ export class CollaborationGateway
       afterSequence,
     );
 
+    // clockValue is a bigint (not JSON-serializable) and yjsUpdate is binary;
+    // emit them as a string and base64 so the payload survives JSON.stringify
+    // and matches the base64 snapshot convention above.
+    const delta = operations.map((op) => ({
+      ...op,
+      clockValue: op.clockValue?.toString() ?? null,
+      yjsUpdate: op.yjsUpdate ? op.yjsUpdate.toString('base64') : null,
+    }));
+
     client.send(
       JSON.stringify({
         event: 'initial_state',
         data: {
           snapshot: snapshot ? snapshot.contentBlob.toString('base64') : null,
-          delta: operations,
+          delta,
           participants,
         },
       }),

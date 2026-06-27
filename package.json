@@ -9,7 +9,7 @@
     "build": "nest build",
     "format": "prettier --write .",
     "drizzle:generate": "drizzle-kit generate",
-    "drizzle:push": "drizzle-kit push",
+    "drizzle:migrate": "node -r ts-node/register -r tsconfig-paths/register src/database/migrate.ts",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
