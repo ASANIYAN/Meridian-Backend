@@ -20,6 +20,8 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiForbiddenResponse,
+  ApiGoneResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
@@ -58,6 +60,8 @@ import { ClaimShareLinkResponseDataDto } from './dto/claim-share-link-response.d
 import { AiService } from '../ai/ai.service';
 import { ChatRequestDto } from '../ai/dto/chat-request.dto';
 import { ChatResponseDto } from '../ai/dto/chat-response.dto';
+import { ProposeChatResponseDto } from '../ai/dto/propose-chat-response.dto';
+import { AcceptProposalRequestDto } from '../ai/dto/accept-proposal-request.dto';
 
 @SkipThrottle({ auth: true })
 @Throttle({ default: {} })
@@ -742,5 +746,165 @@ export class DocumentsController {
       body.message,
     );
     return buildSuccessResponse('Chat applied successfully.', result);
+  }
+
+  @Throttle({ default: {}, 'ai-chat': {} })
+  @Post(':id/chat/propose')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Propose an AI document edit',
+    description:
+      'Runs the same AI pipeline as the chat endpoint (generate, Check 2, Check 3) but stages the result instead of applying it. Returns a proposalId and a before/after diff for review. The edit is invisible to other collaborators until the author accepts. Only the document author may use this endpoint.',
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: ProposeChatResponseDto,
+    description: 'AI edit staged for review.',
+    messageExample: 'Proposal created successfully.',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'message field is missing or the LLM returned an unprocessable response.',
+    schema: errorResponseSchema(
+      400,
+      'LLM returned a non-JSON response',
+      'Bad Request',
+    ),
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiNotFoundResponse({
+    description: 'Document does not exist or has been deleted.',
+    schema: errorResponseSchema(404, 'Document not found', 'Not Found'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  @ApiConflictResponse({
+    description:
+      'Check 2: fuzzy match, or no applicable changes — referenced text has changed.',
+    schema: errorResponseSchema(
+      409,
+      'Check 2: fuzzy match — document may have changed',
+      'Conflict',
+    ),
+  })
+  @ApiUnprocessableEntityResponse({
+    description:
+      'Check 3: scope violation — operations exceed the scope of the instruction.',
+    schema: errorResponseSchema(
+      422,
+      'Operations exceed the scope of the instruction',
+      'Unprocessable Entity',
+    ),
+  })
+  async proposeChat(
+    @Param('id') documentId: string,
+    @Req() request: Request & { user: JwtPayload },
+    @Body() body: ChatRequestDto,
+  ): Promise<SuccessResponse<ProposeChatResponseDto>> {
+    const result = await this.aiService.proposeChat(
+      documentId,
+      request.user.userId,
+      body.message,
+    );
+    return buildSuccessResponse('Proposal created successfully.', result);
+  }
+
+  @Post(':id/chat/proposals/:proposalId/accept')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Accept a staged AI edit',
+    description:
+      "Re-runs Check 2 against the document's current state and applies the re-validated operations through the standard pipeline, broadcasting to all collaborators. If the document drifted into a fuzzy match since the proposal was generated, returns 409 with requires_confirmation and an updated diff; resend with confirm=true to apply anyway. Only the document author may use this endpoint.",
+  })
+  @ApiSuccessResponseEnvelope({
+    dataDto: ChatResponseDto,
+    description: 'Proposal accepted and applied.',
+    messageExample: 'Proposal accepted successfully.',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  @ApiConflictResponse({
+    description:
+      'Check 2 re-validation found a fuzzy match; resend with confirm=true to apply.',
+    schema: errorResponseSchema(
+      409,
+      'Document has changed since this proposal was generated',
+      'Conflict',
+    ),
+  })
+  @ApiGoneResponse({
+    description: 'Proposal expired, was already consumed, or never existed.',
+    schema: errorResponseSchema(
+      410,
+      'This proposal no longer exists; ask the AI again',
+      'Gone',
+    ),
+  })
+  async acceptProposal(
+    @Param('id') documentId: string,
+    @Param('proposalId') proposalId: string,
+    @Req() request: Request & { user: JwtPayload },
+    @Body() body: AcceptProposalRequestDto,
+  ): Promise<SuccessResponse<ChatResponseDto>> {
+    const result = await this.aiService.acceptProposal(
+      documentId,
+      request.user.userId,
+      proposalId,
+      body.confirm ?? false,
+    );
+    return buildSuccessResponse('Proposal accepted successfully.', result);
+  }
+
+  @Delete(':id/chat/proposals/:proposalId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(
+    JwtAuthGuard,
+    DocumentExistsGuard,
+    DocumentMembershipGuard,
+    DocumentAuthorGuard,
+  )
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Decline a staged AI edit',
+    description:
+      'Discards a staged proposal. No document state changes and no operation is ever written. Idempotent — declining an already-gone proposal still returns 204. Only the document author may use this endpoint.',
+  })
+  @ApiNoContentResponse({ description: 'Proposal discarded.' })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, expired, or revoked JWT.',
+    schema: errorResponseSchema(401, 'Authentication required', 'Unauthorized'),
+  })
+  @ApiForbiddenResponse({
+    description: 'Authenticated user is not the author of this document.',
+    schema: errorResponseSchema(403, 'Insufficient permissions', 'Forbidden'),
+  })
+  async declineProposal(
+    @Param('proposalId') proposalId: string,
+  ): Promise<void> {
+    await this.aiService.declineProposal(proposalId);
   }
 }

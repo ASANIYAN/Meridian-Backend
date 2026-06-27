@@ -7,7 +7,11 @@ import { YjsService } from '../yjs/yjs.service';
 import { SnapshotsService } from '../snapshots/snapshots.service';
 import { OperationsService } from '../operations/operations.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { RedisService } from '../redis/redis.service';
 import { DATABASE_CONNECTION } from '../database/database-connection';
+import { AiScopeError } from './errors/ai-scope.error';
+import { ProposalGoneError } from './errors/proposal-gone.error';
+import { AiProposalReconfirmError } from './errors/proposal-reconfirm.error';
 
 type MockFn = jest.Mock<(...args: any[]) => any>;
 
@@ -48,6 +52,13 @@ describe('AiService', () => {
     getLatestSnapshot: jest.fn<(...args: any[]) => any>(),
   };
 
+  const mockRedisService = {
+    stageProposal: jest.fn<(...args: any[]) => any>(),
+    peekProposal: jest.fn<(...args: any[]) => any>(),
+    consumeProposal: jest.fn<(...args: any[]) => any>(),
+    deleteProposal: jest.fn<(...args: any[]) => any>(),
+  };
+
   const mockConfigService: { get: MockFn; getOrThrow: MockFn } = {
     get: jest.fn((_: any, defaultVal?: unknown) => defaultVal),
     getOrThrow: jest
@@ -72,6 +83,9 @@ describe('AiService', () => {
     mockOutboxService.insertOutboxEntry.mockResolvedValue('outbox-id');
     mockOutboxService.enqueueDelivery.mockResolvedValue(undefined);
     mockSnapshotsService.getLatestSnapshot.mockResolvedValue(null);
+    mockRedisService.stageProposal.mockResolvedValue(undefined);
+    mockRedisService.consumeProposal.mockResolvedValue('claimed');
+    mockRedisService.deleteProposal.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -82,6 +96,7 @@ describe('AiService', () => {
         { provide: OutboxService, useValue: mockOutboxService },
         { provide: SnapshotsService, useValue: mockSnapshotsService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: RedisService, useValue: mockRedisService },
       ],
     }).compile();
 
@@ -260,6 +275,191 @@ describe('AiService', () => {
         expect(mockOperationsService.insertOperation).not.toHaveBeenCalled();
         expect(mockOutboxService.enqueueDelivery).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('proposeChat', () => {
+    it('stages the validated ops and returns a diff without applying', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('hello'),
+        operationSequence: 0,
+      });
+      jest
+        .spyOn(service as any, 'callLLM')
+        .mockResolvedValue(
+          JSON.stringify([{ type: 'insert', position: 0, text: 'AI ' }]),
+        );
+      jest.spyOn(service as any, 'checkScope').mockResolvedValue(undefined);
+
+      const result = await service.proposeChat('doc-id', 'user-id', 'prepend');
+
+      expect(result.proposalId).toEqual(expect.any(String));
+      expect(result.diff).toEqual({ before: 'hello', after: 'AI hello' });
+      expect(result.expiresAt).toEqual(expect.any(String));
+      expect(mockRedisService.stageProposal).toHaveBeenCalledTimes(1);
+      // Nothing applied at propose time.
+      expect(mockOperationsService.insertOperation).not.toHaveBeenCalled();
+      expect(mockOutboxService.enqueueDelivery).not.toHaveBeenCalled();
+    });
+
+    it('propagates a scope violation and stages nothing', async () => {
+      jest
+        .spyOn(service as any, 'callLLM')
+        .mockResolvedValue(
+          JSON.stringify([{ type: 'insert', position: 0, text: 'AI ' }]),
+        );
+      jest
+        .spyOn(service as any, 'checkScope')
+        .mockRejectedValue(new AiScopeError('out of scope'));
+
+      await expect(
+        service.proposeChat('doc-id', 'user-id', 'prepend'),
+      ).rejects.toThrow(AiScopeError);
+      expect(mockRedisService.stageProposal).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 409 when every op fails the content check', async () => {
+      // Empty doc: expected_text 'hello' has 0 similarity, all rejected.
+      jest
+        .spyOn(service as any, 'callLLM')
+        .mockResolvedValue(
+          JSON.stringify([
+            { type: 'delete', start: 0, end: 5, expected_text: 'hello' },
+          ]),
+        );
+
+      await expect(
+        service.proposeChat('doc-id', 'user-id', 'delete hello'),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(mockRedisService.stageProposal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('acceptProposal', () => {
+    const stagedProposal = (operations: unknown[]) =>
+      JSON.stringify({
+        documentId: 'doc-id',
+        authorId: 'user-id',
+        instruction: 'delete hello',
+        operations,
+        diff: { before: 'hello', after: '' },
+        createdAt: Date.now(),
+      });
+
+    it('re-validates and applies on an exact match, consuming the proposal', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('hello'),
+        operationSequence: 0,
+      });
+      mockRedisService.peekProposal.mockResolvedValue(
+        stagedProposal([
+          { type: 'delete', start: 0, end: 5, expected_text: 'hello' },
+        ]),
+      );
+
+      const result = await service.acceptProposal(
+        'doc-id',
+        'user-id',
+        'pid',
+        false,
+      );
+
+      expect(result).toEqual({ operations_applied: 1 });
+      expect(mockRedisService.consumeProposal).toHaveBeenCalledWith('pid');
+      expect(mockOperationsService.insertOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 410 when the proposal is missing or expired', async () => {
+      mockRedisService.peekProposal.mockResolvedValue(null);
+
+      await expect(
+        service.acceptProposal('doc-id', 'user-id', 'pid', false),
+      ).rejects.toThrow(ProposalGoneError);
+      expect(mockRedisService.consumeProposal).not.toHaveBeenCalled();
+    });
+
+    it('requires confirmation on a fuzzy match and keeps the proposal', async () => {
+      // Live doc drifted to 'hallo' — fuzzy (not exact) against expected 'hello'.
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('hallo'),
+        operationSequence: 0,
+      });
+      mockRedisService.peekProposal.mockResolvedValue(
+        stagedProposal([
+          { type: 'delete', start: 0, end: 5, expected_text: 'hello' },
+        ]),
+      );
+
+      await expect(
+        service.acceptProposal('doc-id', 'user-id', 'pid', false),
+      ).rejects.toThrow(AiProposalReconfirmError);
+      expect(mockRedisService.consumeProposal).not.toHaveBeenCalled();
+      expect(mockOperationsService.insertOperation).not.toHaveBeenCalled();
+    });
+
+    it('applies a fuzzy match when confirm is true', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('hallo'),
+        operationSequence: 0,
+      });
+      mockRedisService.peekProposal.mockResolvedValue(
+        stagedProposal([
+          { type: 'delete', start: 0, end: 5, expected_text: 'hello' },
+        ]),
+      );
+
+      const result = await service.acceptProposal(
+        'doc-id',
+        'user-id',
+        'pid',
+        true,
+      );
+
+      expect(result).toEqual({ operations_applied: 1 });
+      expect(mockRedisService.consumeProposal).toHaveBeenCalledWith('pid');
+      expect(mockOperationsService.insertOperation).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 410 when another accept already consumed the proposal', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('hello'),
+        operationSequence: 0,
+      });
+      mockRedisService.peekProposal.mockResolvedValue(
+        stagedProposal([
+          { type: 'delete', start: 0, end: 5, expected_text: 'hello' },
+        ]),
+      );
+      mockRedisService.consumeProposal.mockResolvedValue(null);
+
+      await expect(
+        service.acceptProposal('doc-id', 'user-id', 'pid', false),
+      ).rejects.toThrow(ProposalGoneError);
+      expect(mockOperationsService.insertOperation).not.toHaveBeenCalled();
+    });
+
+    it('returns 410 when the proposal belongs to a different document', async () => {
+      mockRedisService.peekProposal.mockResolvedValue(
+        stagedProposal([
+          { type: 'delete', start: 0, end: 5, expected_text: 'hello' },
+        ]).replace('"documentId":"doc-id"', '"documentId":"other-doc"'),
+      );
+
+      await expect(
+        service.acceptProposal('doc-id', 'user-id', 'pid', false),
+      ).rejects.toThrow(ProposalGoneError);
+    });
+  });
+
+  describe('declineProposal', () => {
+    it('deletes the staged proposal', async () => {
+      await service.declineProposal('pid');
+      expect(mockRedisService.deleteProposal).toHaveBeenCalledWith('pid');
     });
   });
 });

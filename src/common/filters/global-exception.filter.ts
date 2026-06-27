@@ -10,6 +10,8 @@ import { Request, Response } from 'express';
 import { AiContentExistenceError } from '../../ai/errors/ai-content-existence.error';
 import { AiScopeError } from '../../ai/errors/ai-scope.error';
 import { AiValidationError } from '../../ai/errors/ai-validation.error';
+import { ProposalGoneError } from '../../ai/errors/proposal-gone.error';
+import { AiProposalReconfirmError } from '../../ai/errors/proposal-reconfirm.error';
 
 const PG_UNIQUE_VIOLATION = '23505';
 const PG_FOREIGN_KEY_VIOLATION = '23503';
@@ -31,6 +33,7 @@ const REASON_PHRASES: Record<number, string> = {
   [HttpStatus.FORBIDDEN]: 'Forbidden',
   [HttpStatus.NOT_FOUND]: 'Not Found',
   [HttpStatus.CONFLICT]: 'Conflict',
+  [HttpStatus.GONE]: 'Gone',
   [HttpStatus.UNPROCESSABLE_ENTITY]: 'Unprocessable Entity',
   [HttpStatus.TOO_MANY_REQUESTS]: 'Too Many Requests',
   [HttpStatus.INTERNAL_SERVER_ERROR]: 'Internal Server Error',
@@ -140,6 +143,31 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         operation_index: exception.operationIndex,
         expected_text: exception.expectedText,
         actual_text: exception.actualText,
+      };
+    }
+
+    // Accept-time re-validation found a fuzzy match: the document drifted since the
+    // proposal was previewed. Surface the updated diff and ask for explicit confirmation
+    // rather than applying something the author didn't review.
+    if (exception instanceof AiProposalReconfirmError) {
+      return {
+        statusCode: HttpStatus.CONFLICT,
+        error: reasonPhrase(HttpStatus.CONFLICT),
+        message: exception.message,
+        check: 'content_existence',
+        requires_confirmation: true,
+        diff: exception.diff,
+        operation_index: exception.operationIndex,
+        expected_text: exception.expectedText,
+        actual_text: exception.actualText,
+      };
+    }
+
+    if (exception instanceof ProposalGoneError) {
+      return {
+        statusCode: HttpStatus.GONE,
+        error: reasonPhrase(HttpStatus.GONE),
+        message: exception.message,
       };
     }
 

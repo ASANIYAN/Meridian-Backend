@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { OperationsModule } from '../operations/operations.module';
 import { YjsModule } from '../yjs/yjs.module';
 import { DatabaseModule } from '../database/database.module';
+import { RedisModule } from '../redis/redis.module';
 import { AiService } from './ai.service';
 import { SnapshotsService } from '../snapshots/snapshots.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -18,6 +19,7 @@ import { OUTBOX_QUEUE } from '../outbox/outbox.queue';
     OperationsModule,
     YjsModule,
     DatabaseModule,
+    RedisModule,
     BullModule.registerQueue({ name: OUTBOX_QUEUE }),
   ],
   providers: [AiService, SnapshotsService, OutboxService],

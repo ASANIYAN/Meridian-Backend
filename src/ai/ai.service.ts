@@ -1,6 +1,7 @@
 import * as Y from 'yjs';
 import * as schema from '../database/schema';
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { ConflictException, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GenerationConfig, GoogleGenerativeAI } from '@google/generative-ai';
 import { YjsService } from '../yjs/yjs.service';
@@ -8,10 +9,13 @@ import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { SnapshotsService } from '../snapshots/snapshots.service';
 import { OperationsService } from '../operations/operations.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { RedisService } from '../redis/redis.service';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { AiValidationError } from './errors/ai-validation.error';
 import { AiContentExistenceError } from './errors/ai-content-existence.error';
 import { AiScopeError } from './errors/ai-scope.error';
+import { ProposalGoneError } from './errors/proposal-gone.error';
+import { AiProposalReconfirmError } from './errors/proposal-reconfirm.error';
 
 type InsertOp = { type: 'insert'; position: number; text: string };
 type DeleteOp = {
@@ -43,6 +47,21 @@ type ContentCheckResult =
       rejectedOps: Array<{ index: number; reason: string }>;
     };
 
+type ChatResult = {
+  operations_applied: number;
+  rejected_operations?: Array<{ index: number; reason: string }>;
+};
+
+// A staged proposal as stored in Redis (JSON) between propose and accept/decline.
+type StagedProposal = {
+  documentId: string;
+  authorId: string;
+  instruction: string;
+  operations: AiOp[];
+  diff: { before: string; after: string };
+  createdAt: number;
+};
+
 const MAX_RETRIES = 2;
 
 @Injectable()
@@ -58,6 +77,7 @@ export class AiService {
     private readonly configService: ConfigService,
     private readonly snapshotService: SnapshotsService,
     private readonly operationsService: OperationsService,
+    private readonly redisService: RedisService,
   ) {
     this.genAI = new GoogleGenerativeAI(
       this.configService.getOrThrow<string>('GEMINI_API_KEY'),
@@ -247,15 +267,178 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
     }
   }
 
+  // Apply-immediately path: generate → Check 2 → Check 3 → apply, in one request.
   async chat(
     documentId: string,
     userId: string,
     message: string,
+  ): Promise<ChatResult> {
+    const { doc, currentText } = await this.reconstructDocument(documentId);
+    const ops = await this.generateValidatedOps(currentText, message);
+
+    // Check 2 — Content existence: fuzzy match throws 409 here, as it always has.
+    const { opsToApply, rejectedOps } = this.resolveContentCheck(
+      ops,
+      currentText,
+    );
+
+    // All ops were rejected by Check 2 — nothing left to apply or scope-check.
+    if (opsToApply.length === 0) {
+      return {
+        operations_applied: 0,
+        ...(rejectedOps.length > 0 && { rejected_operations: rejectedOps }),
+      };
+    }
+
+    // Check 3 — Scope: verify all remaining ops are related to the instruction.
+    await this.checkScope(message, opsToApply);
+
+    await this.applyOps(documentId, userId, doc, opsToApply);
+
+    return {
+      operations_applied: opsToApply.length,
+      ...(rejectedOps.length > 0 && { rejected_operations: rejectedOps }),
+    };
+  }
+
+  // Propose: run the same pipeline as chat (generate → Check 2 → Check 3) but stop short
+  // of applying. Stage the validated operations in Redis and return a previewable diff
+  // plus the proposalId the author uses to later accept or decline.
+  async proposeChat(
+    documentId: string,
+    userId: string,
+    message: string,
   ): Promise<{
-    operations_applied: number;
-    rejected_operations?: Array<{ index: number; reason: string }>;
+    proposalId: string;
+    diff: { before: string; after: string };
+    expiresAt: string;
   }> {
-    // Reconstruct Y.Doc from latest snapshot + any unflushed delta ops
+    const { doc, currentText } = await this.reconstructDocument(documentId);
+    const ops = await this.generateValidatedOps(currentText, message);
+
+    const { opsToApply } = this.resolveContentCheck(ops, currentText);
+
+    // Only stage on a path that would otherwise have applied something today.
+    if (opsToApply.length === 0) {
+      throw new ConflictException(
+        'Referenced text not found; the document may have changed. Ask the AI again.',
+      );
+    }
+
+    await this.checkScope(message, opsToApply);
+
+    // Compute the after-state by applying to the reconstructed (and now discarded) doc.
+    const after = this.computeAfterText(doc, opsToApply);
+    const diff = { before: currentText, after };
+
+    const proposalId = randomUUID();
+    const ttl = this.proposalTtlSeconds();
+    const proposal: StagedProposal = {
+      documentId,
+      authorId: userId,
+      instruction: message,
+      operations: opsToApply,
+      diff,
+      createdAt: Date.now(),
+    };
+
+    await this.redisService.stageProposal(
+      proposalId,
+      JSON.stringify(proposal),
+      ttl,
+    );
+
+    return {
+      proposalId,
+      diff,
+      expiresAt: new Date(Date.now() + ttl * 1000).toISOString(),
+    };
+  }
+
+  // Accept: re-run Check 2 against the document's live state (not the snapshot captured
+  // at propose time), then apply through the standard pipeline. A fuzzy match means the
+  // document drifted since the preview, so we surface the updated diff and require an
+  // explicit confirm rather than applying something the author didn't review.
+  async acceptProposal(
+    documentId: string,
+    userId: string,
+    proposalId: string,
+    confirm: boolean,
+  ): Promise<ChatResult> {
+    const raw = await this.redisService.peekProposal(
+      proposalId,
+      this.proposalTtlSeconds(),
+    );
+    if (raw === null) {
+      throw new ProposalGoneError();
+    }
+
+    const proposal = JSON.parse(raw) as StagedProposal;
+    if (proposal.documentId !== documentId || proposal.authorId !== userId) {
+      // The proposal exists but isn't this author's on this document — indistinguishable
+      // from gone, as far as this caller is concerned.
+      throw new ProposalGoneError();
+    }
+
+    const { doc, currentText } = await this.reconstructDocument(documentId);
+    const checkResult = this.checkContentExistence(
+      proposal.operations,
+      currentText,
+    );
+
+    if (checkResult.outcome === 'fuzzy_match' && !confirm) {
+      const after = this.computeAfterText(doc, proposal.operations);
+      throw new AiProposalReconfirmError(
+        { before: currentText, after },
+        checkResult.operationIndex,
+        checkResult.expectedText,
+        checkResult.actualText,
+      );
+    }
+
+    let opsToApply: AiOp[];
+    let rejectedOps: Array<{ index: number; reason: string }> = [];
+    if (checkResult.outcome === 'partial') {
+      opsToApply = checkResult.validOps;
+      rejectedOps = checkResult.rejectedOps;
+    } else {
+      // all_exact, or fuzzy_match with confirm === true (author reviewed the updated
+      // diff and chose to apply anyway).
+      opsToApply = proposal.operations;
+    }
+
+    // Atomically claim the proposal: only the caller that wins this GETDEL applies, so
+    // a double-accept can never apply the staged operations twice.
+    const claimed = await this.redisService.consumeProposal(proposalId);
+    if (claimed === null) {
+      throw new ProposalGoneError();
+    }
+
+    if (opsToApply.length > 0) {
+      await this.applyOps(documentId, userId, doc, opsToApply);
+    }
+
+    return {
+      operations_applied: opsToApply.length,
+      ...(rejectedOps.length > 0 && { rejected_operations: rejectedOps }),
+    };
+  }
+
+  // Decline: discard the staged proposal. Idempotent — declining an already-gone
+  // proposal still succeeds, since the end state is the same either way.
+  async declineProposal(proposalId: string): Promise<void> {
+    await this.redisService.deleteProposal(proposalId);
+  }
+
+  private proposalTtlSeconds(): number {
+    return this.configService.get<number>('AI_PROPOSAL_TTL_SECONDS', 900);
+  }
+
+  // Reconstruct the Y.Doc from the latest snapshot plus any unflushed delta ops, and
+  // return both the doc and the (truncated-for-LLM) text the AI sees.
+  private async reconstructDocument(
+    documentId: string,
+  ): Promise<{ doc: Y.Doc; currentText: string }> {
     const snapshot = await this.snapshotService.getLatestSnapshot(documentId);
     const deltaOps = await this.operationsService.getOperationsSinceSequence(
       documentId,
@@ -273,6 +456,14 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
     }
 
     const currentText = this.truncateText(this.yjsService.extractText(doc));
+    return { doc, currentText };
+  }
+
+  // Call the LLM with format-retry (Check 1) and return the validated operations.
+  private async generateValidatedOps(
+    currentText: string,
+    message: string,
+  ): Promise<AiOp[]> {
     const userMessage = this.buildUserMessage(currentText, message);
 
     let ops: AiOp[] | null = null;
@@ -306,8 +497,19 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
       }
     }
 
-    // Check 2 — Content existence: verify each op's referenced text still exists
-    const checkResult = this.checkContentExistence(ops!, currentText);
+    return ops!;
+  }
+
+  // Check 2 resolution for the apply-on-pass paths (chat, propose): a fuzzy match is a
+  // hard 409 stop; a partial outcome drops the unmatched ops and reports them.
+  private resolveContentCheck(
+    ops: AiOp[],
+    currentText: string,
+  ): {
+    opsToApply: AiOp[];
+    rejectedOps: Array<{ index: number; reason: string }>;
+  } {
+    const checkResult = this.checkContentExistence(ops, currentText);
 
     if (checkResult.outcome === 'fuzzy_match') {
       throw new AiContentExistenceError(
@@ -317,30 +519,44 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
       );
     }
 
-    let opsToApply = ops!;
-    let rejectedOps: Array<{ index: number; reason: string }> = [];
-
     if (checkResult.outcome === 'partial') {
-      opsToApply = checkResult.validOps;
-      rejectedOps = checkResult.rejectedOps;
-    }
-
-    // All ops were rejected by Check 2 — nothing left to apply or scope-check
-    if (opsToApply.length === 0) {
       return {
-        operations_applied: 0,
-        ...(rejectedOps.length > 0 && { rejected_operations: rejectedOps }),
+        opsToApply: checkResult.validOps,
+        rejectedOps: checkResult.rejectedOps,
       };
     }
 
-    // Check 3 — Scope: verify all remaining ops are related to the instruction
-    await this.checkScope(message, opsToApply);
+    return { opsToApply: ops, rejectedOps: [] };
+  }
 
+  // Apply ops to a fresh, non-truncated clone of the doc's text and return the resulting
+  // text — used to build the diff preview without persisting anything.
+  private computeAfterText(doc: Y.Doc, ops: AiOp[]): string {
+    const yjsText = doc.getText('content');
+    for (const op of ops) {
+      if (op.type === 'insert') {
+        yjsText.insert(op.position, op.text);
+      } else if (op.type === 'delete') {
+        yjsText.delete(op.start, op.end - op.start);
+      } else {
+        yjsText.format(op.start, op.end - op.start, op.attributes);
+      }
+    }
+    return this.truncateText(this.yjsService.extractText(doc));
+  }
+
+  // Apply each op to the reconstructed Y.Doc, then persist operations + outbox in one
+  // transaction and enqueue delivery — the same path every other document edit uses.
+  private async applyOps(
+    documentId: string,
+    userId: string,
+    doc: Y.Doc,
+    ops: AiOp[],
+  ): Promise<void> {
     const perOpBinaries: Buffer[] = [];
 
-    // Apply each valid op to the reconstructed Y.Doc
     const yjsText = doc.getText('content');
-    for (const op of opsToApply) {
+    for (const op of ops) {
       const vectorBefore = Y.encodeStateVector(doc);
       if (op.type === 'insert') {
         yjsText.insert(op.position, op.text);
@@ -386,11 +602,6 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
     for (const outboxId of outboxIds) {
       await this.outboxService.enqueueDelivery(outboxId);
     }
-
-    return {
-      operations_applied: opsToApply.length,
-      ...(rejectedOps.length > 0 && { rejected_operations: rejectedOps }),
-    };
   }
 
   private buildUserMessage(currentText: string, message: string): string {
