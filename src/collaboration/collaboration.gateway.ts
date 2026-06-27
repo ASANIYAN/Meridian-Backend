@@ -607,7 +607,7 @@ export class CollaborationGateway
           await this.snapshotQueue.add(
             SNAPSHOT_JOB,
             { documentId },
-            { jobId: `snapshot:${documentId}` },
+            { jobId: `snapshot-${documentId}` },
           );
         }
       }

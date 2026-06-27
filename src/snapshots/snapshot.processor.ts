@@ -61,7 +61,7 @@ export class SnapshotProcessor extends WorkerHost {
             this.queue.add(
               SNAPSHOT_JOB,
               { documentId: doc.id },
-              { jobId: `snapshot:${doc.id}` },
+              { jobId: `snapshot-${doc.id}` },
             ),
           ),
         );
