@@ -1,6 +1,18 @@
 import * as Y from 'yjs';
 import { Injectable, Logger } from '@nestjs/common';
 
+type DescribableYjsContent = {
+  isCountable(): boolean;
+  getLength(): number;
+  getContent(): unknown[];
+};
+
+type LinearXmlText = {
+  node: Y.XmlText;
+  start: number;
+  end: number;
+};
+
 @Injectable()
 export class YjsService {
   private readonly logger = new Logger(YjsService.name);
@@ -17,7 +29,92 @@ export class YjsService {
 
   // Returns the plain text content of the shared 'content' text type in the doc.
   extractText(doc: Y.Doc): string {
+    const content = this.getExistingContentType(doc);
+    if (content instanceof Y.Text) {
+      return content.toJSON();
+    }
+
+    if (content instanceof Y.XmlFragment) {
+      return this.extractXmlText(content);
+    }
+
     return doc.getText('content').toJSON();
+  }
+
+  insertText(doc: Y.Doc, position: number, text: string): void {
+    const content = this.getExistingContentType(doc);
+    if (!(content instanceof Y.XmlFragment)) {
+      (content instanceof Y.Text ? content : doc.getText('content')).insert(
+        position,
+        text,
+      );
+      return;
+    }
+
+    const xmlTextNodes = this.linearizeXmlText(content);
+    if (xmlTextNodes.length === 0) {
+      const xmlText = new Y.XmlText();
+      xmlText.insert(0, text);
+      content.insert(0, [xmlText]);
+      return;
+    }
+
+    const target =
+      xmlTextNodes.find((node) => position <= node.end) ??
+      xmlTextNodes[xmlTextNodes.length - 1];
+
+    target.node.insert(
+      this.clamp(position - target.start, 0, target.end),
+      text,
+    );
+  }
+
+  deleteText(doc: Y.Doc, start: number, length: number): void {
+    const content = this.getExistingContentType(doc);
+    if (!(content instanceof Y.XmlFragment)) {
+      (content instanceof Y.Text ? content : doc.getText('content')).delete(
+        start,
+        length,
+      );
+      return;
+    }
+
+    const xmlTextNodes = this.linearizeXmlText(content);
+    this.forEachXmlTextRange(
+      xmlTextNodes,
+      start,
+      length,
+      (node, from, size) => {
+        node.delete(from, size);
+      },
+    );
+  }
+
+  formatText(
+    doc: Y.Doc,
+    start: number,
+    length: number,
+    attributes: Record<string, unknown>,
+  ): void {
+    const content = this.getExistingContentType(doc);
+    if (!(content instanceof Y.XmlFragment)) {
+      (content instanceof Y.Text ? content : doc.getText('content')).format(
+        start,
+        length,
+        attributes,
+      );
+      return;
+    }
+
+    const xmlTextNodes = this.linearizeXmlText(content);
+    this.forEachXmlTextRange(
+      xmlTextNodes,
+      start,
+      length,
+      (node, from, size) => {
+        node.format(from, size, attributes);
+      },
+    );
   }
 
   // Serialises the entire document state to binary — equivalent to one update that
@@ -36,10 +133,38 @@ export class YjsService {
     return Object.fromEntries(map);
   }
 
+  describeUpdate(update: Buffer): Record<string, unknown> {
+    const decoded = Y.decodeUpdate(update);
+    return {
+      byteLength: update.byteLength,
+      structCount: decoded.structs.length,
+      structs: decoded.structs.map((struct) => {
+        const content =
+          struct instanceof Y.Item
+            ? this.describeContent(struct.content)
+            : null;
+
+        return {
+          kind: struct.constructor.name,
+          id: `${struct.id.client}:${struct.id.clock}`,
+          length: struct.length,
+          content,
+        };
+      }),
+      deleteSet: [...decoded.ds.clients].map(([clientId, ranges]) => ({
+        clientId,
+        ranges: ranges.map((range) => ({
+          clock: range.clock,
+          length: range.len,
+        })),
+      })),
+    };
+  }
+
   // Inspects a raw Yjs binary update and returns its semantic type (insert/delete/format)
   // plus a human-readable payload and the highest Lamport clock value it carries.
   classifyUpdate(update: Buffer): {
-    type: 'insert' | 'delete' | 'format';
+    type: 'insert' | 'delete' | 'format' | 'yjs_update';
     payload: Record<string, unknown>;
     receivedClock: number;
   } {
@@ -117,6 +242,148 @@ export class YjsService {
       };
     }
 
+    if (decoded.structs.length > 0) {
+      return {
+        type: 'yjs_update',
+        payload: { struct_count: decoded.structs.length },
+        receivedClock,
+      };
+    }
+
     throw new Error('Unable to classify Yjs update: no recognizable content');
+  }
+
+  private describeContent(
+    describableContent: DescribableYjsContent,
+  ): Record<string, unknown> {
+    const contentSummary: Record<string, unknown> = {
+      kind: this.constructorName(describableContent),
+      countable: describableContent.isCountable(),
+      length: describableContent.getLength(),
+    };
+
+    if (describableContent instanceof Y.ContentString) {
+      return { ...contentSummary, value: describableContent.str };
+    }
+
+    if (describableContent instanceof Y.ContentFormat) {
+      return {
+        ...contentSummary,
+        key: describableContent.key,
+        value: describableContent.value,
+      };
+    }
+
+    const values = describableContent.getContent();
+    if (values.length > 0) {
+      return {
+        ...contentSummary,
+        values: values.map((value) => this.describeContentValue(value)),
+      };
+    }
+
+    return contentSummary;
+  }
+
+  private extractXmlText(type: Y.AbstractType<unknown>): string {
+    if (type instanceof Y.XmlText) {
+      return String(type.toString());
+    }
+
+    if (type instanceof Y.XmlElement || type instanceof Y.XmlFragment) {
+      return (type.toArray() as unknown[])
+        .map((child) => {
+          if (child instanceof Y.AbstractType) {
+            return this.extractXmlText(child);
+          }
+
+          return '';
+        })
+        .join('');
+    }
+
+    return '';
+  }
+
+  private getExistingContentType(doc: Y.Doc): Y.AbstractType<unknown> | null {
+    return (
+      (
+        doc as unknown as { share: Map<string, Y.AbstractType<unknown>> }
+      ).share.get('content') ?? null
+    );
+  }
+
+  private linearizeXmlText(fragment: Y.XmlFragment): LinearXmlText[] {
+    const nodes: LinearXmlText[] = [];
+    let offset = 0;
+
+    const visit = (type: Y.AbstractType<unknown>) => {
+      if (type instanceof Y.XmlText) {
+        const length = String(type.toString()).length;
+        nodes.push({ node: type, start: offset, end: offset + length });
+        offset += length;
+        return;
+      }
+
+      if (type instanceof Y.XmlElement || type instanceof Y.XmlFragment) {
+        for (const child of type.toArray() as unknown[]) {
+          if (child instanceof Y.AbstractType) {
+            visit(child);
+          }
+        }
+      }
+    };
+
+    visit(fragment);
+    return nodes;
+  }
+
+  private forEachXmlTextRange(
+    nodes: LinearXmlText[],
+    start: number,
+    length: number,
+    callback: (node: Y.XmlText, from: number, length: number) => void,
+  ): void {
+    const end = start + length;
+
+    for (const node of nodes) {
+      const overlapStart = Math.max(start, node.start);
+      const overlapEnd = Math.min(end, node.end);
+      if (overlapStart >= overlapEnd) continue;
+
+      callback(node.node, overlapStart - node.start, overlapEnd - overlapStart);
+    }
+  }
+
+  private clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  private describeContentValue(value: unknown): unknown {
+    if (value instanceof Uint8Array) {
+      return { kind: 'Uint8Array', byteLength: value.byteLength };
+    }
+
+    if (value && typeof value === 'object') {
+      return {
+        kind: this.constructorName(value),
+      };
+    }
+
+    return value;
+  }
+
+  private constructorName(value: unknown): string {
+    if (
+      value &&
+      typeof value === 'object' &&
+      'constructor' in value &&
+      typeof value.constructor === 'function' &&
+      value.constructor.name
+    ) {
+      return value.constructor.name;
+    }
+
+    return typeof value;
   }
 }

@@ -201,7 +201,19 @@ export class CollaborationGateway
       this.logger.log('Client connected');
       client.on('message', (data: WebSocket.RawData) => {
         if (Buffer.isBuffer(data)) {
-          this.logger.debug(`Received binary frame: ${data.byteLength} bytes`);
+          try {
+            this.logger.debug(
+              `Received binary frame: ${JSON.stringify(
+                this.yjsService.describeUpdate(data),
+              )}`,
+            );
+          } catch (error) {
+            const msg =
+              error instanceof Error ? error.message : 'Unknown error';
+            this.logger.debug(
+              `Received undecodable binary frame: ${data.byteLength} bytes (${msg})`,
+            );
+          }
         }
       });
     } catch (error) {

@@ -34,7 +34,7 @@ export const envValidationSchema = Joi.object({
   SHARE_LINK_EXPIRY_DAYS: Joi.number().integer().positive().default(7),
   WS_PORT: Joi.number().port().default(8001),
   GEMINI_API_KEY: Joi.string().trim().required(),
-  GEMINI_MODEL: Joi.string().trim().default('gemini-3.5-flash'),
+  GEMINI_MODEL: Joi.string().trim().default('gemini-3-flash'),
   AI_MAX_TOKENS: Joi.number().integer().positive().default(1000),
   AI_MAX_DOC_CHARS: Joi.number().integer().positive().default(60000),
   AI_FUZZY_THRESHOLD: Joi.number().min(0).max(1).default(0.7),
