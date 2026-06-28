@@ -103,7 +103,7 @@ export class AiService {
     maxOutputTokens: number,
   ): Promise<string> {
     const model = this.genAI.getGenerativeModel({
-      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-3.5-flash'),
+      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-3-flash'),
       systemInstruction,
       generationConfig: {
         maxOutputTokens,
@@ -532,14 +532,18 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
   // Apply ops to a fresh, non-truncated clone of the doc's text and return the resulting
   // text — used to build the diff preview without persisting anything.
   private computeAfterText(doc: Y.Doc, ops: AiOp[]): string {
-    const yjsText = doc.getText('content');
     for (const op of ops) {
       if (op.type === 'insert') {
-        yjsText.insert(op.position, op.text);
+        this.yjsService.insertText(doc, op.position, op.text);
       } else if (op.type === 'delete') {
-        yjsText.delete(op.start, op.end - op.start);
+        this.yjsService.deleteText(doc, op.start, op.end - op.start);
       } else {
-        yjsText.format(op.start, op.end - op.start, op.attributes);
+        this.yjsService.formatText(
+          doc,
+          op.start,
+          op.end - op.start,
+          op.attributes,
+        );
       }
     }
     return this.truncateText(this.yjsService.extractText(doc));
@@ -555,15 +559,19 @@ If even one change is unrelated or goes beyond the instruction, scope_valid must
   ): Promise<void> {
     const perOpBinaries: Buffer[] = [];
 
-    const yjsText = doc.getText('content');
     for (const op of ops) {
       const vectorBefore = Y.encodeStateVector(doc);
       if (op.type === 'insert') {
-        yjsText.insert(op.position, op.text);
+        this.yjsService.insertText(doc, op.position, op.text);
       } else if (op.type === 'delete') {
-        yjsText.delete(op.start, op.end - op.start);
+        this.yjsService.deleteText(doc, op.start, op.end - op.start);
       } else {
-        yjsText.format(op.start, op.end - op.start, op.attributes);
+        this.yjsService.formatText(
+          doc,
+          op.start,
+          op.end - op.start,
+          op.attributes,
+        );
       }
 
       perOpBinaries.push(Buffer.from(Y.encodeStateAsUpdate(doc, vectorBefore)));
