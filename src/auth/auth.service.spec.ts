@@ -33,6 +33,8 @@ import { MailService } from '../mail/mail.service';
 import { UsersService } from '../users/users.service';
 import { PasswordResetTokensService } from '../password_reset_tokens/password_reset_tokens.service';
 
+type MockFn = jest.Mock<(...args: any[]) => any>;
+
 describe('AuthService', () => {
   let service: AuthService;
   let database: ReturnType<typeof createDatabaseMock>;
@@ -42,7 +44,7 @@ describe('AuthService', () => {
   >;
   let configService: ReturnType<typeof createConfigServiceMock>;
   let usersService: ReturnType<typeof createUsersServiceMock>;
-  let jwtService: { signAsync: jest.Mock };
+  let jwtService: { signAsync: MockFn };
 
   afterEach(() => {
     jest.restoreAllMocks();
@@ -169,7 +171,9 @@ describe('AuthService', () => {
     it('throws ConflictException when the database rejects with a unique constraint violation', async () => {
       usersService.getUserByEmail.mockResolvedValue(undefined);
 
-      const returning = jest.fn().mockRejectedValue({ code: '23505' });
+      const returning = jest
+        .fn<(...args: any[]) => any>()
+        .mockRejectedValue({ code: '23505' });
       const values = jest.fn().mockReturnValue({ returning });
       database.insert.mockReturnValue({ values });
 
@@ -375,7 +379,7 @@ describe('AuthService', () => {
       const set = jest.fn().mockReturnValue({ where });
       const tx = { update: jest.fn().mockReturnValue({ set }) };
       database.transaction.mockImplementation(
-        (fn: (tx: typeof tx) => Promise<void>) => fn(tx),
+        (fn: (_tx: typeof tx) => Promise<void>) => fn(tx),
       );
 
       const result = await service.resetPassword({
@@ -396,25 +400,25 @@ describe('AuthService', () => {
 
 function createDatabaseMock() {
   return {
-    select: jest.fn(),
-    insert: jest.fn(),
-    update: jest.fn(),
-    transaction: jest.fn(),
+    select: jest.fn<(...args: any[]) => any>(),
+    insert: jest.fn<(...args: any[]) => any>(),
+    update: jest.fn<(...args: any[]) => any>(),
+    transaction: jest.fn<(...args: any[]) => any>(),
   };
 }
 
 function createUsersServiceMock() {
   return {
-    getUserByEmail: jest.fn(),
-    getUserCredentialsByEmail: jest.fn(),
-    getUserById: jest.fn(),
+    getUserByEmail: jest.fn<(...args: any[]) => any>(),
+    getUserCredentialsByEmail: jest.fn<(...args: any[]) => any>(),
+    getUserById: jest.fn<(...args: any[]) => any>(),
   };
 }
 
 function createRedisServiceMock() {
   return {
-    blacklistToken: jest.fn(),
-    isTokenBlacklisted: jest.fn(),
+    blacklistToken: jest.fn<(...args: any[]) => any>(),
+    isTokenBlacklisted: jest.fn<(...args: any[]) => any>(),
   };
 }
 
@@ -431,11 +435,11 @@ function createMailServiceMock() {
 
 function createPasswordResetTokensServiceMock() {
   return {
-    revokeActiveTokensForUser: jest.fn(),
-    createToken: jest.fn(),
+    revokeActiveTokensForUser: jest.fn<(...args: any[]) => any>(),
+    createToken: jest.fn<(...args: any[]) => any>(),
     getActiveTokensByUserId:
       jest.fn<() => Promise<Array<{ id: string; tokenHash: string }>>>(),
-    revokeOtherActiveTokensForUser: jest.fn(),
+    revokeOtherActiveTokensForUser: jest.fn<(...args: any[]) => any>(),
   };
 }
 

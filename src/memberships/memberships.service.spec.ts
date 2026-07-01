@@ -12,6 +12,12 @@ import { MembershipsService } from './memberships.service';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { UsersService } from '../users/users.service';
 
+type MockFn = jest.Mock<(...args: any[]) => any>;
+
+function mockFn(): MockFn {
+  return jest.fn<(...args: any[]) => any>();
+}
+
 describe('MembershipsService', () => {
   let service: MembershipsService;
   let database: ReturnType<typeof createDatabaseMock>;
@@ -54,8 +60,8 @@ describe('MembershipsService', () => {
         updatedAt: new Date(),
       };
 
-      const where = jest.fn().mockResolvedValue([membership]);
-      const from = jest.fn().mockReturnValue({ where });
+      const where = mockFn().mockResolvedValue([membership]);
+      const from = mockFn().mockReturnValue({ where });
       database.select.mockReturnValue({ from });
 
       const result = await service.getUserDocumentMembership('doc-1', 'user-1');
@@ -64,8 +70,8 @@ describe('MembershipsService', () => {
     });
 
     it('returns undefined when no membership exists', async () => {
-      const where = jest.fn().mockResolvedValue([]);
-      const from = jest.fn().mockReturnValue({ where });
+      const where = mockFn().mockResolvedValue([]);
+      const from = mockFn().mockReturnValue({ where });
       database.select.mockReturnValue({ from });
 
       const result = await service.getUserDocumentMembership('doc-1', 'user-1');
@@ -100,9 +106,9 @@ describe('MembershipsService', () => {
         updatedAt: new Date(),
       };
 
-      const returning = jest.fn().mockResolvedValue([membershipRow]);
-      const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
-      const values = jest.fn().mockReturnValue({ onConflictDoNothing });
+      const returning = mockFn().mockResolvedValue([membershipRow]);
+      const onConflictDoNothing = mockFn().mockReturnValue({ returning });
+      const values = mockFn().mockReturnValue({ onConflictDoNothing });
       database.insert.mockReturnValue({ values });
 
       const result = await service.addMember(
@@ -134,9 +140,9 @@ describe('MembershipsService', () => {
         updatedAt: new Date(),
       };
 
-      const returning = jest.fn().mockResolvedValue([membershipRow]);
-      const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
-      const values = jest.fn().mockReturnValue({ onConflictDoNothing });
+      const returning = mockFn().mockResolvedValue([membershipRow]);
+      const onConflictDoNothing = mockFn().mockReturnValue({ returning });
+      const values = mockFn().mockReturnValue({ onConflictDoNothing });
       database.insert.mockReturnValue({ values });
 
       const result = await service.addMember(
@@ -162,9 +168,9 @@ describe('MembershipsService', () => {
       usersService.getUserByEmail.mockResolvedValue(user);
 
       // onConflictDoNothing fires: insert returns empty array
-      const returning = jest.fn().mockResolvedValue([]);
-      const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
-      const values = jest.fn().mockReturnValue({ onConflictDoNothing });
+      const returning = mockFn().mockResolvedValue([]);
+      const onConflictDoNothing = mockFn().mockReturnValue({ returning });
+      const values = mockFn().mockReturnValue({ onConflictDoNothing });
       database.insert.mockReturnValue({ values });
 
       await expect(
@@ -189,16 +195,16 @@ describe('MembershipsService', () => {
       const userRow = { id: 'user-1', firstName: 'Alice', lastName: 'Smith' };
 
       // First DB call: update().set().where().returning()
-      const returningUpdate = jest.fn().mockResolvedValue([membershipRow]);
+      const returningUpdate = mockFn().mockResolvedValue([membershipRow]);
       const whereUpdate = jest
         .fn()
         .mockReturnValue({ returning: returningUpdate });
-      const set = jest.fn().mockReturnValue({ where: whereUpdate });
+      const set = mockFn().mockReturnValue({ where: whereUpdate });
       database.update.mockReturnValue({ set });
 
       // Second DB call: select().from().where()
-      const whereSelect = jest.fn().mockResolvedValue([userRow]);
-      const from = jest.fn().mockReturnValue({ where: whereSelect });
+      const whereSelect = mockFn().mockResolvedValue([userRow]);
+      const from = mockFn().mockReturnValue({ where: whereSelect });
       database.select.mockReturnValue({ from });
 
       const result = await service.updateMemberRole(
@@ -218,11 +224,11 @@ describe('MembershipsService', () => {
     });
 
     it('throws NotFoundException when the membership does not exist', async () => {
-      const returningUpdate = jest.fn().mockResolvedValue([]);
+      const returningUpdate = mockFn().mockResolvedValue([]);
       const whereUpdate = jest
         .fn()
         .mockReturnValue({ returning: returningUpdate });
-      const set = jest.fn().mockReturnValue({ where: whereUpdate });
+      const set = mockFn().mockReturnValue({ where: whereUpdate });
       database.update.mockReturnValue({ set });
 
       await expect(
@@ -235,7 +241,7 @@ describe('MembershipsService', () => {
 
   describe('removeMember', () => {
     it('calls delete with the correct documentId and userId', async () => {
-      const where = jest.fn().mockResolvedValue(undefined);
+      const where = mockFn().mockResolvedValue(undefined);
       database.delete.mockReturnValue({ where });
 
       await service.removeMember('doc-1', 'user-1');
@@ -261,9 +267,9 @@ describe('MembershipsService', () => {
     it('throws ConflictException when the user is already a member', async () => {
       // onConflictDoNothing fires on the (documentId, userId) unique constraint:
       // the insert returns an empty array.
-      const returning = jest.fn().mockResolvedValue([]);
-      const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
-      const values = jest.fn().mockReturnValue({ onConflictDoNothing });
+      const returning = mockFn().mockResolvedValue([]);
+      const onConflictDoNothing = mockFn().mockReturnValue({ returning });
+      const values = mockFn().mockReturnValue({ onConflictDoNothing });
       database.insert.mockReturnValue({ values });
 
       await expect(
@@ -283,9 +289,9 @@ describe('MembershipsService', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
       };
-      const returning = jest.fn().mockResolvedValue([memberRow]);
-      const onConflictDoNothing = jest.fn().mockReturnValue({ returning });
-      const values = jest.fn().mockReturnValue({ onConflictDoNothing });
+      const returning = mockFn().mockResolvedValue([memberRow]);
+      const onConflictDoNothing = mockFn().mockReturnValue({ returning });
+      const values = mockFn().mockReturnValue({ onConflictDoNothing });
       database.insert.mockReturnValue({ values });
 
       const result = await service.addMemberViaLink(
@@ -305,16 +311,16 @@ describe('MembershipsService', () => {
 
 function createDatabaseMock() {
   return {
-    select: jest.fn(),
-    insert: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
+    select: jest.fn<(...args: any[]) => any>(),
+    insert: jest.fn<(...args: any[]) => any>(),
+    update: jest.fn<(...args: any[]) => any>(),
+    delete: jest.fn<(...args: any[]) => any>(),
   };
 }
 
 function createUsersServiceMock() {
   return {
-    getUserByEmail: jest.fn(),
-    getUserById: jest.fn(),
+    getUserByEmail: jest.fn<(...args: any[]) => any>(),
+    getUserById: jest.fn<(...args: any[]) => any>(),
   };
 }
