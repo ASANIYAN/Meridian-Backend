@@ -26,8 +26,8 @@ export const envValidationSchema = Joi.object({
     .integer()
     .positive()
     .required(),
-  RESEND_API_KEY: Joi.string().trim().required(),
-  RESEND_FROM_EMAIL: Joi.string().trim().required(),
+  BREVO_API_KEY: Joi.string().trim().required(),
+  BREVO_FROM_EMAIL: Joi.string().trim().required(),
   SHARE_LINK_EXPIRY_DAYS: Joi.number().integer().positive().default(7),
   GEMINI_API_KEY: Joi.string().trim().required(),
   GEMINI_MODEL: Joi.string().trim().default('gemini-3-flash'),

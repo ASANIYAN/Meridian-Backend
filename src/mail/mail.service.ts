@@ -2,22 +2,22 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Resend } from 'resend';
+import { BrevoClient } from '@getbrevo/brevo';
 
 const TEMPLATES_DIR = join(__dirname, 'templates');
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  private readonly resend: Resend;
+  private readonly brevo: BrevoClient;
   private readonly fromAddress: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.resend = new Resend(
-      this.configService.getOrThrow<string>('RESEND_API_KEY'),
-    );
+    this.brevo = new BrevoClient({
+      apiKey: this.configService.getOrThrow<string>('BREVO_API_KEY'),
+    });
     this.fromAddress =
-      this.configService.getOrThrow<string>('RESEND_FROM_EMAIL');
+      this.configService.getOrThrow<string>('BREVO_FROM_EMAIL');
   }
 
   private async send(params: {
@@ -26,14 +26,13 @@ export class MailService {
     html: string;
     text: string;
   }) {
-    const { error } = await this.resend.emails.send({
-      from: this.fromAddress,
-      ...params,
+    await this.brevo.transactionalEmails.sendTransacEmail({
+      sender: { email: this.fromAddress },
+      to: [{ email: params.to }],
+      subject: params.subject,
+      htmlContent: params.html,
+      textContent: params.text,
     });
-
-    if (error) {
-      throw new Error(error.message);
-    }
   }
 
   private buildUrl(path: string, queryParams: Record<string, string> = {}) {
