@@ -23,7 +23,7 @@ Meridian is a NestJS backend for collaborative document editing. Multiple users 
 
 ## Architecture
 
-- **HTTP API** (configurable `PORT`) and **WebSocket gateway** (`WS_PORT`, default 8001) run as separate listeners in the same process.
+- **HTTP API** and **WebSocket gateway** share a single listener on `PORT`; WS connections upgrade over the same port as the REST API.
 - The WebSocket gateway authenticates connections via JWT, routes Yjs binary updates into an operation log (Postgres), and fan-outs to room peers. Redis pub/sub bridges updates across multiple server instances.
 - An **outbox pattern** (BullMQ + Postgres) ensures operations are reliably delivered even if a worker crashes mid-write.
 - **Snapshots** compact accumulated operations into a single Yjs state blob on disconnect (threshold-based) or on a scheduled interval, keeping replay time bounded.
@@ -58,8 +58,7 @@ Required variables to fill in:
 
 ```
 # App
-PORT=                        # HTTP listen port
-WS_PORT=8001                 # WebSocket gateway port
+PORT=                        # HTTP + WebSocket listen port
 APP_URL=                     # Frontend origin (for CORS / email links)
 
 # Database
@@ -150,7 +149,7 @@ All HTTP routes are prefixed with `/v1` except `/health`.
 | `POST`   | `/v1/documents/:id/chat`            | Bearer | Apply AI instruction to document (author only) |
 | `GET`    | `/health`                           | —      | Liveness + DB/Redis readiness check            |
 
-**WebSocket** — connect to `ws://host:<WS_PORT>` with `Authorization: Bearer <token>` header (or `?token=` query param), then send:
+**WebSocket** — connect to `ws://host:<PORT>` (same port as the HTTP API) with `Authorization: Bearer <token>` header (or `?token=` query param), then send:
 
 | Event                | Direction       | Payload                                          |
 | -------------------- | --------------- | ------------------------------------------------ |

@@ -32,7 +32,6 @@ export const envValidationSchema = Joi.object({
   SMTP_PASS: Joi.string().allow('').required(),
   SMTP_SECURE: Joi.boolean().required(),
   SHARE_LINK_EXPIRY_DAYS: Joi.number().integer().positive().default(7),
-  WS_PORT: Joi.number().port().default(8001),
   GEMINI_API_KEY: Joi.string().trim().required(),
   GEMINI_MODEL: Joi.string().trim().default('gemini-3-flash'),
   AI_MAX_TOKENS: Joi.number().integer().positive().default(1000),

@@ -29,8 +29,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { SNAPSHOT_JOB, SNAPSHOT_QUEUE } from '../snapshots/snapshot.queue';
 import { Queue } from 'bullmq';
 
-const port = Number(process.env.WS_PORT) || 8001;
-
 type AuthenticatedSocket = WebSocket & {
   user: {
     userId: string;
@@ -52,7 +50,7 @@ type AuthenticatedSocket = WebSocket & {
 
 type RoomsMap = Map<string, Set<AuthenticatedSocket>>;
 
-@WebSocketGateway(port)
+@WebSocketGateway()
 export class CollaborationGateway
   implements
     OnGatewayInit,
