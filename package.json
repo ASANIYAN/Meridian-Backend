@@ -54,12 +54,14 @@
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
     "ws": "^8.21.0",
-    "yjs": "^13.6.31"
+    "yjs": "^13.6.31",
+    "@nestjs/cli": "^11.0.0",
+    "bcryptjs": "^3.0.3",
+    "typescript": "^5.7.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
-    "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/express": "^5.0.0",
@@ -67,7 +69,6 @@
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
     "@types/ws": "^8.18.1",
-    "bcryptjs": "^3.0.3",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
@@ -83,7 +84,6 @@
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
   },
   "lint-staged": {
