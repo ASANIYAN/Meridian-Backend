@@ -26,7 +26,7 @@ export class MailService {
   }
 
   async sendVerificationEmail(to: string, token: string) {
-    const verificationUrl = this.buildUrl('/auth/verify-email', {
+    const verificationUrl = this.buildUrl('/verify-email', {
       email: to,
       token,
     });
@@ -54,7 +54,7 @@ export class MailService {
   }
 
   async sendPasswordResetEmail(to: string, token: string) {
-    const resetUrl = this.buildUrl('/auth/reset-password', {
+    const resetUrl = this.buildUrl('/reset-password', {
       email: to,
       token,
     });
