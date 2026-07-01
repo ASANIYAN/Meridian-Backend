@@ -283,11 +283,13 @@ export class DocumentsController {
   async addMember(
     @Param('id') documentId: string,
     @Body() body: AddDocumentMemberDto,
+    @Req() request: Request & { user: JwtPayload },
   ) {
     const member = await this.documentService.addDocumentMember(
       documentId,
       body.email,
       body.role,
+      request.user.userId,
     );
 
     return buildSuccessResponse('Member added successfully.', member);

@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
+    <title>Meridian — Document invitation</title>
+    <!--[if mso]>
+    <noscript>
+      <xml>
+        <o:OfficeDocumentSettings>
+          <o:PixelsPerInch>96</o:PixelsPerInch>
+        </o:OfficeDocumentSettings>
+      </xml>
+    </noscript>
+    <![endif]-->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,400&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body,
+      table,
+      td {
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
+      table,
+      td {
+        mso-table-lspace: 0pt;
+        mso-table-rspace: 0pt;
+      }
+      img {
+        border: 0;
+        line-height: 100%;
+        outline: none;
+        text-decoration: none;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100% !important;
+        background-color: #f6f7f9;
+      }
+      a {
+        text-decoration: none;
+      }
+
+      @media screen and (max-width: 600px) {
+        .email-container {
+          width: 100% !important;
+        }
+        .email-padding {
+          padding-left: 20px !important;
+          padding-right: 20px !important;
+        }
+      }
+    </style>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background-color: #f6f7f9;
+      font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    "
+  >
+    <!-- Preheader (hidden preview text) -->
+    <div
+      style="
+        display: none;
+        max-height: 0;
+        overflow: hidden;
+        mso-hide: all;
+        font-size: 1px;
+        line-height: 1px;
+        color: #f6f7f9;
+        opacity: 0;
+      "
+    >
+      {{inviterName}} invited you to collaborate on "{{documentTitle}}" as a {{role}}.
+    </div>
+
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      style="background-color: #f6f7f9"
+    >
+      <tr>
+        <td align="center" style="padding: 40px 16px">
+          <table
+            role="presentation"
+            width="480"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            class="email-container"
+            style="
+              width: 480px;
+              max-width: 480px;
+              background-color: #ffffff;
+              border: 1px solid #d7dee6;
+              border-radius: 10px;
+              overflow: hidden;
+            "
+          >
+            <!-- Header band -->
+            <tr>
+              <td
+                style="
+                  background-color: #0f1a2a;
+                  padding: 26px 32px;
+                  border-bottom: 2px solid #cda349;
+                "
+              >
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="vertical-align: middle; padding-right: 10px">
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#cda349"
+                        stroke-width="1.4"
+                      >
+                        <line x1="12" y1="2" x2="12" y2="22" />
+                        <line x1="3" y1="12" x2="21" y2="12" />
+                        <circle cx="12" cy="12" r="7" />
+                      </svg>
+                    </td>
+                    <td style="vertical-align: middle">
+                      <span
+                        style="
+                          font-family: 'Geist Mono', 'Courier New', monospace;
+                          font-size: 12px;
+                          font-weight: 500;
+                          letter-spacing: 0.28em;
+                          text-transform: uppercase;
+                          color: #f6f7f9;
+                        "
+                        >Meridian</span
+                      >
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Body -->
+            <tr>
+              <td class="email-padding" style="padding: 36px 32px 32px">
+                <p
+                  style="
+                    margin: 0 0 10px;
+                    font-family: 'Geist Mono', 'Courier New', monospace;
+                    font-size: 11px;
+                    font-weight: 500;
+                    letter-spacing: 0.18em;
+                    text-transform: uppercase;
+                    color: #4f6072;
+                  "
+                >
+                  Document invitation
+                </p>
+
+                <h1
+                  style="
+                    margin: 0 0 16px;
+                    font-family: 'Fraunces', Georgia, serif;
+                    font-weight: 600;
+                    font-size: 25px;
+                    line-height: 1.28;
+                    letter-spacing: -0.01em;
+                    color: #0f1a2a;
+                  "
+                >
+                  {{inviterName}} invited you to collaborate
+                </h1>
+
+                <p
+                  style="
+                    margin: 0 0 24px;
+                    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                      sans-serif;
+                    font-size: 15px;
+                    line-height: 1.65;
+                    color: #1b2737;
+                  "
+                >
+                  Hi,<br />
+                  <strong style="color: #0f1a2a">{{inviterName}}</strong> has invited you to
+                  collaborate on <strong style="color: #0f1a2a">{{documentTitle}}</strong> in
+                  Meridian as
+                  <strong style="color: #0f1a2a">{{role}}</strong>.
+                </p>
+
+                <!-- Document cartouche -->
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  style="
+                    background-color: #f6f7f9;
+                    border: 1px solid #d7dee6;
+                    border-radius: 8px;
+                    margin: 0 0 28px;
+                  "
+                >
+                  <tr>
+                    <td style="padding: 16px 18px">
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr>
+                          <td
+                            style="
+                              font-family: 'Geist Mono', 'Courier New', monospace;
+                              font-size: 10.5px;
+                              font-weight: 500;
+                              letter-spacing: 0.16em;
+                              text-transform: uppercase;
+                              color: #4f6072;
+                              padding-bottom: 6px;
+                            "
+                          >
+                            Document
+                          </td>
+                        </tr>
+                        <tr>
+                          <td
+                            style="
+                              font-family: 'Fraunces', Georgia, serif;
+                              font-weight: 500;
+                              font-size: 17px;
+                              color: #0f1a2a;
+                              padding-bottom: 12px;
+                            "
+                          >
+                            {{documentTitle}}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="border-top: 1px solid #d7dee6; padding-top: 12px">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                              <tr>
+                                <td
+                                  style="
+                                    font-family: 'Geist Mono', 'Courier New', monospace;
+                                    font-size: 10.5px;
+                                    font-weight: 500;
+                                    letter-spacing: 0.14em;
+                                    text-transform: uppercase;
+                                    color: #4f6072;
+                                    padding-right: 8px;
+                                  "
+                                >
+                                  Role
+                                </td>
+                                <td>
+                                  <span
+                                    style="
+                                      display: inline-block;
+                                      font-family: 'Geist Mono', 'Courier New', monospace;
+                                      font-size: 11px;
+                                      font-weight: 500;
+                                      letter-spacing: 0.06em;
+                                      text-transform: uppercase;
+                                      color: #0f1a2a;
+                                      background-color: #e2c079;
+                                      padding: 2px 9px;
+                                      border-radius: 4px;
+                                    "
+                                    >{{role}}</span
+                                  >
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- CTA button -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td
+                      align="center"
+                      style="
+                        border-radius: 6px;
+                        background-color: #cda349;
+                      "
+                    >
+                      <a
+                        href="{{acceptInviteLink}}"
+                        target="_blank"
+                        style="
+                          display: inline-block;
+                          padding: 13px 28px;
+                          font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                            Roboto, sans-serif;
+                          font-size: 14.5px;
+                          font-weight: 600;
+                          letter-spacing: 0.01em;
+                          color: #0f1a2a;
+                        "
+                        >Open document →</a
+                      >
+                    </td>
+                  </tr>
+                </table>
+
+                <p
+                  style="
+                    margin: 20px 0 0;
+                    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                      sans-serif;
+                    font-size: 12.5px;
+                    line-height: 1.6;
+                    color: #4f6072;
+                  "
+                >
+                  Or paste this link into your browser:<br />
+                  <a
+                    href="{{acceptInviteLink}}"
+                    style="
+                      font-family: 'Geist Mono', 'Courier New', monospace;
+                      font-size: 12px;
+                      color: #4f6072;
+                      word-break: break-all;
+                    "
+                    >{{acceptInviteLink}}</a
+                  >
+                </p>
+
+                <div
+                  style="height: 1px; background-color: #eceff3; margin: 28px 0 20px"
+                ></div>
+
+                <p
+                  style="
+                    margin: 0;
+                    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                      sans-serif;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    color: #4f6072;
+                  "
+                >
+                  This invitation was sent to
+                  <strong style="color: #1b2737">{{recipientEmail}}</strong>. If you don't have a
+                  Meridian account yet, you'll be prompted to create one first — using this same
+                  email address will link you straight to the document.
+                </p>
+
+                <p
+                  style="
+                    margin: 26px 0 0;
+                    font-family: 'Fraunces', Georgia, serif;
+                    font-style: italic;
+                    font-size: 15px;
+                    color: #0f1a2a;
+                  "
+                >
+                  — The Meridian Team
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Footer -->
+          <table
+            role="presentation"
+            width="480"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            class="email-container"
+            style="width: 480px; max-width: 480px; margin-top: 20px"
+          >
+            <tr>
+              <td align="center" style="padding: 0 32px">
+                <p
+                  style="
+                    margin: 0;
+                    font-family: 'Geist Mono', 'Courier New', monospace;
+                    font-size: 10.5px;
+                    letter-spacing: 0.16em;
+                    text-transform: uppercase;
+                    color: #97a3b0;
+                  "
+                >
+                  51°28′N · 0°00′W · Prime Meridian
+                </p>
+                <p
+                  style="
+                    margin: 10px 0 0;
+                    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                      sans-serif;
+                    font-size: 11.5px;
+                    color: #97a3b0;
+                  "
+                >
+                  Sent to {{recipientEmail}} · Meridian, where every edit converges.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

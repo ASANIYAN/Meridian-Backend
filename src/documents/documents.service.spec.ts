@@ -12,6 +12,8 @@ import { DocumentsService } from './documents.service';
 import { DATABASE_CONNECTION } from '../database/database-connection';
 import { MembershipsService } from '../memberships/memberships.service';
 import { ShareLinksService } from '../share_links/share_links.service';
+import { UsersService } from '../users/users.service';
+import { MailService } from '../mail/mail.service';
 
 type MockFn = jest.Mock<(...args: any[]) => any>;
 
@@ -24,6 +26,8 @@ describe('DocumentsService', () => {
   let database: ReturnType<typeof createDatabaseMock>;
   let membershipsService: ReturnType<typeof createMembershipsServiceMock>;
   let shareLinksService: ReturnType<typeof createShareLinksServiceMock>;
+  let usersService: ReturnType<typeof createUsersServiceMock>;
+  let mailService: ReturnType<typeof createMailServiceMock>;
 
   afterEach(() => {
     jest.restoreAllMocks();
@@ -33,6 +37,8 @@ describe('DocumentsService', () => {
     database = createDatabaseMock();
     membershipsService = createMembershipsServiceMock();
     shareLinksService = createShareLinksServiceMock();
+    usersService = createUsersServiceMock();
+    mailService = createMailServiceMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -40,6 +46,8 @@ describe('DocumentsService', () => {
         { provide: DATABASE_CONNECTION, useValue: database },
         { provide: MembershipsService, useValue: membershipsService },
         { provide: ShareLinksService, useValue: shareLinksService },
+        { provide: UsersService, useValue: usersService },
+        { provide: MailService, useValue: mailService },
       ],
     }).compile();
 
@@ -178,6 +186,7 @@ describe('DocumentsService', () => {
         'doc-1',
         'bob@example.com',
         'editor',
+        'user-1',
       );
 
       expect(membershipsService.addMember).toHaveBeenCalledWith(
@@ -547,5 +556,18 @@ function createShareLinksServiceMock() {
   return {
     findAndValidateLink: jest.fn<(...args: any[]) => any>(),
     markLinkAsClaimed: jest.fn<(...args: any[]) => any>(),
+  };
+}
+
+function createUsersServiceMock() {
+  return {
+    getUserById: jest.fn<(...args: any[]) => any>(),
+    getUserByEmail: jest.fn<(...args: any[]) => any>(),
+  };
+}
+
+function createMailServiceMock() {
+  return {
+    sendDocumentInvitationEmail: jest.fn<(...args: any[]) => any>(),
   };
 }

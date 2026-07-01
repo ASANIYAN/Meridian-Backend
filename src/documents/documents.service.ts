@@ -11,6 +11,8 @@ import { DATABASE_CONNECTION } from '../database/database-connection';
 import { and, desc, eq, getTableColumns, ne, sql } from 'drizzle-orm';
 import { MembershipsService } from '../memberships/memberships.service';
 import { ShareLinksService } from '../share_links/share_links.service';
+import { UsersService } from '../users/users.service';
+import { MailService } from '../mail/mail.service';
 
 type DocumentWithRole = typeof schema.documents.$inferSelect & {
   role: (typeof schema.membershipRoleEnum.enumValues)[number];
@@ -29,6 +31,8 @@ export class DocumentsService {
     private readonly database: NodePgDatabase<typeof schema>,
     private readonly membershipsService: MembershipsService,
     private readonly sharelinksService: ShareLinksService,
+    private readonly usersService: UsersService,
+    private readonly mailService: MailService,
   ) {}
 
   async getDocumentById(id: string) {
@@ -161,8 +165,47 @@ export class DocumentsService {
     documentId: string,
     email: string,
     role: 'editor' | 'viewer',
+    inviterId: string,
   ) {
-    return await this.membershipsService.addMember(documentId, email, role);
+    const member = await this.membershipsService.addMember(
+      documentId,
+      email,
+      role,
+    );
+
+    void this.sendDocumentInvitationEmail(documentId, email, role, inviterId);
+
+    return member;
+  }
+
+  private async sendDocumentInvitationEmail(
+    documentId: string,
+    email: string,
+    role: 'editor' | 'viewer',
+    inviterId: string,
+  ) {
+    try {
+      const [document, inviter] = await Promise.all([
+        this.getDocumentById(documentId),
+        this.usersService.getUserById(inviterId),
+      ]);
+
+      const inviterName =
+        [inviter.firstName, inviter.lastName].filter(Boolean).join(' ') ||
+        inviter.email;
+
+      await this.mailService.sendDocumentInvitationEmail(
+        email,
+        inviterName,
+        document.title,
+        role,
+        documentId,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send document invitation email to ${email}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
   }
 
   async updateDocumentMemberRole(
