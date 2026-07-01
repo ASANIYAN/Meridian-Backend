@@ -2,18 +2,39 @@ import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { MailerService } from '@nestjs-modules/mailer';
+import { Resend } from 'resend';
 
 const TEMPLATES_DIR = join(__dirname, 'templates');
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
+  private readonly resend: Resend;
+  private readonly fromAddress: string;
 
-  constructor(
-    private readonly mailer: MailerService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {
+    this.resend = new Resend(
+      this.configService.getOrThrow<string>('RESEND_API_KEY'),
+    );
+    this.fromAddress =
+      this.configService.getOrThrow<string>('RESEND_FROM_EMAIL');
+  }
+
+  private async send(params: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }) {
+    const { error } = await this.resend.emails.send({
+      from: this.fromAddress,
+      ...params,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
 
   private buildUrl(path: string, queryParams: Record<string, string> = {}) {
     const appUrl = this.configService.getOrThrow<string>('APP_URL');
@@ -57,7 +78,7 @@ export class MailService {
     });
 
     try {
-      await this.mailer.sendMail({
+      await this.send({
         to,
         subject,
         html,
@@ -84,7 +105,7 @@ export class MailService {
     });
 
     try {
-      await this.mailer.sendMail({
+      await this.send({
         to,
         subject,
         html,
@@ -116,7 +137,7 @@ export class MailService {
     });
 
     try {
-      await this.mailer.sendMail({
+      await this.send({
         to,
         subject,
         html,

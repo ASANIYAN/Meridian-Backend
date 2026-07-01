@@ -27,8 +27,8 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@nestjs-modules/mailer": "^2.3.4",
     "@nestjs/bullmq": "^11.0.4",
+    "@nestjs/cli": "^11.0.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -41,6 +41,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@nestjs/websockets": "^11.1.26",
     "@types/pg": "^8.20.0",
+    "bcryptjs": "^3.0.3",
     "bullmq": "^5.79.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -51,13 +52,12 @@
     "pg": "^8.20.0",
     "redis": "^5.12.1",
     "reflect-metadata": "^0.2.2",
+    "resend": "^6.16.0",
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
+    "typescript": "^5.7.3",
     "ws": "^8.21.0",
-    "yjs": "^13.6.31",
-    "@nestjs/cli": "^11.0.0",
-    "bcryptjs": "^3.0.3",
-    "typescript": "^5.7.3"
+    "yjs": "^13.6.31"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
