@@ -15,7 +15,7 @@ import {
   addMembership,
 } from './helpers/db';
 
-const WS_PORT = Number(process.env.WS_PORT);
+const PORT = Number(process.env.PORT);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 type PresenceMessage = {
@@ -81,7 +81,7 @@ describe('Presence roster (e2e)', () => {
     messages: PresenceMessage[];
   }> {
     return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://localhost:${WS_PORT}/?token=${token}`);
+      const ws = new WebSocket(`ws://localhost:${PORT}/?token=${token}`);
       const messages: PresenceMessage[] = [];
       sockets.push(ws);
       ws.on('message', (data: WebSocket.RawData, isBinary: boolean) => {

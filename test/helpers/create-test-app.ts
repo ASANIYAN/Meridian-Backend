@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from '../../src/app.module';
 import { MailService } from '../../src/mail/mail.service';
@@ -23,7 +24,8 @@ export async function createTestApp(): Promise<{
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
   app.useWebSocketAdapter(new WsAdapter(app));
 
-  await app.init();
+  const port = app.get(ConfigService).getOrThrow<number>('PORT');
+  await app.listen(port);
 
   return { app, mockMail };
 }
