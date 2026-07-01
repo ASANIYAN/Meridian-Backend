@@ -179,14 +179,16 @@ describe('YjsService', () => {
       expect(text.toString()).toBe('hello rich world');
     });
 
-    it('applies deletes across rich editor XmlText nodes', () => {
+    it('applies deletes across inline XmlText nodes within a block', () => {
       const doc = new Y.Doc();
       const fragment = doc.getXmlFragment('content');
+      const paragraph = new Y.XmlElement('paragraph');
       const first = new Y.XmlText();
       const second = new Y.XmlText();
       first.insert(0, 'hello ');
       second.insert(0, 'rich world');
-      fragment.insert(0, [first, second]);
+      paragraph.insert(0, [first, second]);
+      fragment.insert(0, [paragraph]);
 
       service.deleteText(doc, 6, 5);
 
@@ -228,6 +230,85 @@ describe('YjsService', () => {
 
       expect(doc.share.get('content')).toBeInstanceOf(Y.Text);
       expect(service.extractText(doc)).toBe('legacy plain text');
+    });
+  });
+
+  describe('block-aware authoring', () => {
+    const buildParagraph = (text: string): Y.XmlElement => {
+      const paragraph = new Y.XmlElement('paragraph');
+      const xmlText = new Y.XmlText();
+      xmlText.insert(0, text);
+      paragraph.insert(0, [xmlText]);
+      return paragraph;
+    };
+
+    it('joins top-level blocks with a blank line in extractText', () => {
+      const doc = new Y.Doc();
+      doc
+        .getXmlFragment('content')
+        .insert(0, [buildParagraph('first'), buildParagraph('second')]);
+
+      expect(service.extractText(doc)).toBe('first\n\nsecond');
+    });
+
+    it('splits a blank-line insert into a new sibling paragraph instead of inlining it', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+      fragment.insert(0, [buildParagraph('intro')]);
+
+      // Append a new paragraph after the existing one (anchor resolves to end offset).
+      service.insertText(doc, 'intro'.length, '\n\nA brand new paragraph.');
+
+      expect(fragment.length).toBe(2);
+      expect(fragment.get(0)).toBeInstanceOf(Y.XmlElement);
+      expect(fragment.get(1)).toBeInstanceOf(Y.XmlElement);
+      expect(service.extractText(doc)).toBe('intro\n\nA brand new paragraph.');
+    });
+
+    it('creates one paragraph per block for a multi-paragraph insert', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+      fragment.insert(0, [buildParagraph('start')]);
+
+      service.insertText(doc, 'start'.length, '\n\nfirst\n\nsecond');
+
+      expect(fragment.length).toBe(3);
+      expect(service.extractText(doc)).toBe('start\n\nfirst\n\nsecond');
+    });
+
+    it('splits the current block when a block-break insert lands mid-paragraph', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+      fragment.insert(0, [buildParagraph('helloworld')]);
+
+      // Insert a paragraph break between "hello" and "world".
+      service.insertText(doc, 'hello'.length, '\n\n');
+
+      expect(fragment.length).toBe(2);
+      expect(service.extractText(doc)).toBe('hello\n\nworld');
+    });
+
+    it('keeps delete offsets aligned across the block separator', () => {
+      const doc = new Y.Doc();
+      doc
+        .getXmlFragment('content')
+        .insert(0, [buildParagraph('alpha'), buildParagraph('beta')]);
+
+      // 'alpha\n\nbeta' — delete 'beta' (starts after 'alpha' + separator).
+      const start = 'alpha\n\n'.length;
+      service.deleteText(doc, start, 'beta'.length);
+
+      expect(service.extractText(doc)).toBe('alpha\n\n');
+    });
+
+    it('seeds multiple paragraphs when first-authoring block-separated text', () => {
+      const doc = new Y.Doc();
+
+      service.insertText(doc, 0, 'one\n\ntwo');
+
+      const fragment = doc.getXmlFragment('content');
+      expect(fragment.length).toBe(2);
+      expect(service.extractText(doc)).toBe('one\n\ntwo');
     });
   });
 

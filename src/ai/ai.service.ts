@@ -932,6 +932,7 @@ Each element must be one of these three shapes:
   { "type": "format", "start": <number>, "end": <number>, "attributes": <object>, "expected_text": <string> }
 Positions are 0-indexed character offsets in the current document text.
 For "insert": always include "anchor_text", a short exact quote (roughly 3-8 words) copied verbatim from the current document next to where the new text belongs, and "anchor_position" set to "before" or "after" that quote. The server locates the anchor by searching the document, so the numeric "position" is only a rough hint. To append to the end of the document, quote the final words of the document as "anchor_text" with "anchor_position": "after". Only omit "anchor_text" when the document is empty.
+Paragraphs in the document are separated by a blank line. To add one or more new paragraphs, put a blank line (\n\n) between them in the "text" field; each block becomes its own paragraph. Do not embed blank lines inside a single paragraph.
 For "delete" and "format": end must be greater than start, and "expected_text" must be the exact text currently at those positions in the document.`;
   }
 
@@ -943,7 +944,7 @@ Each element must be exactly one of:
   { "type": "insert", "position": <number>, "text": <string>, "anchor_text": <string>, "anchor_position": "before" | "after" }
   { "type": "delete", "start": <number>, "end": <number>, "expected_text": <string> }
   { "type": "format", "start": <number>, "end": <number>, "attributes": <object>, "expected_text": <string> }
-Rules: positions are 0-indexed character offsets. For "insert", always include "anchor_text" (a short exact quote copied verbatim from the current document) and "anchor_position" ("before" or "after" that quote); to append at the end, quote the final words with "anchor_position": "after"; only omit "anchor_text" when the document is empty. For "delete" and "format", end must be greater than start, "text" must be a non-empty string, and "expected_text" must be the exact text currently at those positions in the document.`;
+Rules: positions are 0-indexed character offsets. For "insert", always include "anchor_text" (a short exact quote copied verbatim from the current document) and "anchor_position" ("before" or "after" that quote); to append at the end, quote the final words with "anchor_position": "after"; only omit "anchor_text" when the document is empty. Paragraphs are separated by a blank line; to add new paragraphs, separate them with a blank line (\n\n) in "text". For "delete" and "format", end must be greater than start, "text" must be a non-empty string, and "expected_text" must be the exact text currently at those positions in the document.`;
   }
 
   private validateOperations(parsed: unknown): AiOp[] {
