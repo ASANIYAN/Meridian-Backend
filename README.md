@@ -159,6 +159,8 @@ All HTTP routes are prefixed with `/v1` except `/health`.
 | `ack`                | server → client | `{ operation_sequence, status }`                 |
 | `rate_limit_warning` | server → client | `{ message }`                                    |
 
+Full protocol details (close codes, presence events, message framing, a client flow walkthrough) are in [`docs/websocket.md`](docs/websocket.md).
+
 ## Running Tests
 
 ```bash
