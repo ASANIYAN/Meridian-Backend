@@ -68,9 +68,12 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   // Publishes a binary payload to a Redis pub/sub channel (e.g. a Yjs update frame).
   // Uses raw sendCommand because the typed publish helper encodes data as a string,
-  // which corrupts binary payloads.
-  async publish(channel: string, data: Buffer) {
-    await this.client.sendCommand(['PUBLISH', channel, data]);
+  // which corrupts binary payloads. Returns the number of subscribers that received the
+  // frame (Redis PUBLISH reply) — 0 means nothing is listening on the channel, so the
+  // frame was silently dropped.
+  async publish(channel: string, data: Buffer): Promise<number> {
+    const receivers = await this.client.sendCommand(['PUBLISH', channel, data]);
+    return Number(receivers ?? 0);
   }
 
   // Registers a callback that fires whenever a message arrives on the channel.

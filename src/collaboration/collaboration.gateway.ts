@@ -273,15 +273,33 @@ export class CollaborationGateway
           (frame: Buffer) => {
             // Skip frames this same instance published — they were already sent to the
             // local room directly, so re-sending here would deliver them twice.
-            if (frame.subarray(0, 16).equals(this.instanceId)) return;
+            if (frame.subarray(0, 16).equals(this.instanceId)) {
+              this.logger.log(
+                `doc relay skipped self-echo: ${JSON.stringify({
+                  documentId,
+                  byteLength: frame.byteLength,
+                })}`,
+              );
+              return;
+            }
 
             const update = frame.subarray(16);
             const room = this.roomsMap.get(documentId);
+            let delivered = 0;
             room?.forEach((socket) => {
               if (socket.readyState === WebSocket.OPEN) {
                 socket.send(update);
+                delivered++;
               }
             });
+            this.logger.log(
+              `doc relay delivered: ${JSON.stringify({
+                documentId,
+                byteLength: update.byteLength,
+                roomSize: room?.size ?? 0,
+                delivered,
+              })}`,
+            );
           },
         );
 

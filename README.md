@@ -27,6 +27,7 @@ Meridian is a NestJS backend for collaborative document editing. Multiple users 
 - The WebSocket gateway authenticates connections via JWT, routes Yjs binary updates into an operation log (Postgres), and fan-outs to room peers. Redis pub/sub bridges updates across multiple server instances.
 - An **outbox pattern** (BullMQ + Postgres) ensures operations are reliably delivered even if a worker crashes mid-write.
 - **Snapshots** compact accumulated operations into a single Yjs state blob on disconnect (threshold-based) or on a scheduled interval, keeping replay time bounded.
+- **Document content** lives in a Yjs `XmlFragment` named `content`, shaped as ProseMirror block structure (each top-level child is a block element such as `paragraph` or `heading`) so it binds directly to a Tiptap/ProseMirror frontend. Every authoring path — human edits, AI edits, and seeds — preserves this block structure; text is only ever written inside a block, never loose at the fragment root.
 - All routes return a consistent `{ success, message, data, meta? }` envelope; errors go through a global exception filter.
 
 ## Prerequisites
