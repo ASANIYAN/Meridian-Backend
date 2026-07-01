@@ -78,24 +78,49 @@ export class YjsService {
       return this.extractXmlText(content);
     }
 
-    return doc.getText('content').toJSON();
+    // No content type integrated yet. Return empty without calling doc.getText, which
+    // would materialize 'content' as a Y.Text and force every later write onto the
+    // plain-text path — the write paths choose Y.XmlFragment for new content instead.
+    return '';
   }
 
-  insertText(doc: Y.Doc, position: number, text: string): void {
+  // Resolves the concrete type to write edits into. Legacy docs whose 'content' was
+  // authored as a plain Y.Text keep that type; anything else (including brand-new docs
+  // with no content yet) is materialized as an XmlFragment so first writes produce
+  // ProseMirror block structure rather than a Y.Text.
+  private resolveWritableContent(doc: Y.Doc): Y.Text | Y.XmlFragment {
     const content = this.getExistingContentType(doc);
-    if (!(content instanceof Y.XmlFragment)) {
-      (content instanceof Y.Text ? content : doc.getText('content')).insert(
-        position,
-        text,
-      );
+    if (content instanceof Y.Text) return content;
+    if (content instanceof Y.XmlFragment) return content;
+    return doc.getXmlFragment('content');
+  }
+
+  // Builds a block-level <paragraph> wrapping a single Y.XmlText, matching the frontend
+  // Tiptap/StarterKit schema. An empty paragraph still carries an empty XmlText so later
+  // inserts have an inline node to target.
+  private createParagraph(text?: string): Y.XmlElement {
+    const paragraph = new Y.XmlElement('paragraph');
+    const xmlText = new Y.XmlText();
+    if (text) xmlText.insert(0, text);
+    paragraph.insert(0, [xmlText]);
+    return paragraph;
+  }
+
+  // Inserts text at a flat character offset. Legacy Y.Text docs are edited directly;
+  // rich XmlFragment docs map the offset onto the XmlText node it lands in.
+  insertText(doc: Y.Doc, position: number, text: string): void {
+    const content = this.resolveWritableContent(doc);
+    if (content instanceof Y.Text) {
+      content.insert(position, text);
       return;
     }
 
     const xmlTextNodes = this.linearizeXmlText(content);
     if (xmlTextNodes.length === 0) {
-      const xmlText = new Y.XmlText();
-      xmlText.insert(0, text);
-      content.insert(0, [xmlText]);
+      // ProseMirror requires every top-level child of the content fragment to be a block
+      // Y.XmlElement — a bare Y.XmlText at the root crashes y-prosemirror's hydration
+      // (el.toArray is not a function). Wrap the text in a paragraph.
+      content.insert(0, [this.createParagraph(text)]);
       return;
     }
 
@@ -109,13 +134,11 @@ export class YjsService {
     );
   }
 
+  // Deletes a flat character range, splitting it across every XmlText node it spans.
   deleteText(doc: Y.Doc, start: number, length: number): void {
-    const content = this.getExistingContentType(doc);
-    if (!(content instanceof Y.XmlFragment)) {
-      (content instanceof Y.Text ? content : doc.getText('content')).delete(
-        start,
-        length,
-      );
+    const content = this.resolveWritableContent(doc);
+    if (content instanceof Y.Text) {
+      content.delete(start, length);
       return;
     }
 
@@ -130,19 +153,17 @@ export class YjsService {
     );
   }
 
+  // Applies formatting marks (bold, italic, …) to a flat character range across every
+  // XmlText node it spans.
   formatText(
     doc: Y.Doc,
     start: number,
     length: number,
     attributes: Record<string, unknown>,
   ): void {
-    const content = this.getExistingContentType(doc);
-    if (!(content instanceof Y.XmlFragment)) {
-      (content instanceof Y.Text ? content : doc.getText('content')).format(
-        start,
-        length,
-        attributes,
-      );
+    const content = this.resolveWritableContent(doc);
+    if (content instanceof Y.Text) {
+      content.format(start, length, attributes);
       return;
     }
 
@@ -173,6 +194,8 @@ export class YjsService {
     return Object.fromEntries(map);
   }
 
+  // Decodes a binary update into a human-readable summary of its structs and delete set,
+  // used for operation logging/debugging.
   describeUpdate(update: Buffer): Record<string, unknown> {
     const decoded = Y.decodeUpdate(update);
     return {
@@ -236,6 +259,12 @@ export class YjsService {
         typeof (s.content as Y.ContentFormat).key === 'string',
     );
 
+    // Priority matters: a diff produced by encodeStateAsUpdate (how AI edits are encoded)
+    // always carries the doc's FULL delete set, so a pure format op co-travels with
+    // historical tombstones and hasDeletes is true even though nothing new was deleted.
+    // Classify by the meaningful new structs first (insert, then format) and only fall
+    // back to "delete" when the update introduces no structs of its own — otherwise every
+    // AI format op would be mislabeled as a delete.
     if (insertStruct) {
       const content = insertStruct.content as Y.ContentString;
       // client:clock is the unique CRDT identity of this insert position.
@@ -243,17 +272,6 @@ export class YjsService {
       return {
         type: 'insert',
         payload: { insert_id: insertId, content: content.str },
-        receivedClock,
-      };
-    }
-
-    if (hasDeletes) {
-      // The delete set maps clientId → array of clock ranges that were deleted.
-      const [[clientId, ranges]] = [...decoded.ds.clients];
-      const deleteId = `${clientId}:${ranges[0].clock}`;
-      return {
-        type: 'delete',
-        payload: { delete_id: deleteId },
         receivedClock,
       };
     }
@@ -278,6 +296,17 @@ export class YjsService {
           end_id: endId,
           formatting: { [content.key]: content.value },
         },
+        receivedClock,
+      };
+    }
+
+    if (hasDeletes) {
+      // The delete set maps clientId → array of clock ranges that were deleted.
+      const [[clientId, ranges]] = [...decoded.ds.clients];
+      const deleteId = `${clientId}:${ranges[0].clock}`;
+      return {
+        type: 'delete',
+        payload: { delete_id: deleteId },
         receivedClock,
       };
     }
@@ -325,6 +354,8 @@ export class YjsService {
     return contentSummary;
   }
 
+  // Recursively concatenates all text within an XML type (fragment/element/text) into a
+  // single plain string.
   private extractXmlText(type: Y.AbstractType<unknown>): string {
     if (type instanceof Y.XmlText) {
       return String(type.toString());
@@ -345,6 +376,8 @@ export class YjsService {
     return '';
   }
 
+  // Peeks the shared 'content' type from doc.share without materializing it (the public
+  // getters would assign a concrete constructor as a side effect).
   private getExistingContentType(doc: Y.Doc): Y.AbstractType<unknown> | null {
     return (
       (
@@ -353,6 +386,9 @@ export class YjsService {
     );
   }
 
+  // Flattens an XmlFragment's nested XmlText nodes into a list carrying each node's
+  // absolute start/end offset, so a flat character position can be mapped back to the
+  // node that owns it.
   private linearizeXmlText(fragment: Y.XmlFragment): LinearXmlText[] {
     const nodes: LinearXmlText[] = [];
     let offset = 0;
@@ -378,6 +414,8 @@ export class YjsService {
     return nodes;
   }
 
+  // Runs callback for each XmlText node overlapping the flat range [start, start+length),
+  // translating the overlap into that node's local coordinates.
   private forEachXmlTextRange(
     nodes: LinearXmlText[],
     start: number,

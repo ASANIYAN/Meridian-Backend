@@ -87,7 +87,17 @@ const seedMembershipIds = {
 // which throws on anything that isn't a valid Yjs update.
 function buildContentBlob(text: string): Buffer {
   const doc = new Y.Doc();
-  doc.getText('content').insert(0, text);
+  // The frontend binds 'content' as a ProseMirror XmlFragment, which requires every
+  // top-level child to be a block Y.XmlElement. Author one <paragraph> per line; an
+  // empty text still yields a single empty paragraph (''.split('\n') === ['']).
+  const paragraphs = text.split('\n').map((line) => {
+    const paragraph = new Y.XmlElement('paragraph');
+    const xmlText = new Y.XmlText();
+    if (line) xmlText.insert(0, line);
+    paragraph.insert(0, [xmlText]);
+    return paragraph;
+  });
+  doc.getXmlFragment('content').insert(0, paragraphs);
   return Buffer.from(Y.encodeStateAsUpdate(doc));
 }
 

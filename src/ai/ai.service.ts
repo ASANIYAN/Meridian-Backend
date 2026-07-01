@@ -865,13 +865,33 @@ Do not reject merely because an operation deletes text that is relevant to the t
     for (const outboxId of outboxIds) {
       await this.outboxService.enqueueDelivery(outboxId);
     }
+    this.logger.log(
+      `AI operations enqueued for delivery: ${JSON.stringify({
+        documentId,
+        outboxIds,
+      })}`,
+    );
 
     for (const binary of perOpBinaries) {
       try {
-        await this.redisService.publish(
+        const receivers = await this.redisService.publish(
           `doc:${documentId}`,
           Buffer.concat([OUTBOX_FRAME_HEADER, binary]),
         );
+        this.logger.log(
+          `AI operation broadcast: ${JSON.stringify({
+            documentId,
+            channel: `doc:${documentId}`,
+            byteLength: binary.byteLength,
+            subscribers: receivers,
+          })}`,
+        );
+        if (receivers === 0) {
+          this.logger.warn(
+            `AI operation broadcast reached 0 subscribers for document ${documentId}; ` +
+              `no gateway instance is subscribed to doc:${documentId}, so no connected client will see this edit until it rejoins.`,
+          );
+        }
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         this.logger.warn(

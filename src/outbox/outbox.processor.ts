@@ -65,9 +65,17 @@ export class OutboxProcessor extends WorkerHost {
         return;
       }
 
-      await this.redisService.publish(
+      const receivers = await this.redisService.publish(
         `doc:${outboxRow.documentId}`,
         Buffer.concat([OUTBOX_FRAME_HEADER, outboxRow.payload]),
+      );
+      this.logger.log(
+        `Outbox delivered: ${JSON.stringify({
+          outboxId,
+          documentId: outboxRow.documentId,
+          byteLength: outboxRow.payload.byteLength,
+          subscribers: receivers,
+        })}`,
       );
 
       await this.outboxService.deleteRow(outboxId);

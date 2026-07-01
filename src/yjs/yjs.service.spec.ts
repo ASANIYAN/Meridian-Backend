@@ -192,6 +192,43 @@ describe('YjsService', () => {
 
       expect(service.extractText(doc)).toBe('hello world');
     });
+
+    it('wraps the first insert into an empty fragment in a paragraph element, not bare text', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+
+      service.insertText(doc, 0, 'hello world');
+
+      // ProseMirror/y-prosemirror requires every top-level child to be a block element;
+      // a bare Y.XmlText at the root is what crashes hydration (el.toArray is not a function).
+      const firstChild = fragment.get(0);
+      expect(firstChild).toBeInstanceOf(Y.XmlElement);
+      expect((firstChild as Y.XmlElement).nodeName).toBe('paragraph');
+      expect(service.extractText(doc)).toBe('hello world');
+    });
+
+    it('materializes brand-new content as an XmlFragment paragraph, not a Y.Text', () => {
+      // Mirrors an AI edit on a document with no snapshot: nothing is integrated under
+      // 'content' yet, so the write path must choose XmlFragment (rich) over Y.Text (plain).
+      const doc = new Y.Doc();
+
+      service.insertText(doc, 0, 'first words');
+
+      expect(doc.share.get('content')).toBeInstanceOf(Y.XmlFragment);
+      const firstChild = doc.getXmlFragment('content').get(0);
+      expect(firstChild).toBeInstanceOf(Y.XmlElement);
+      expect(service.extractText(doc)).toBe('first words');
+    });
+
+    it('keeps editing a legacy Y.Text content on the plain-text path', () => {
+      const doc = new Y.Doc();
+      doc.getText('content').insert(0, 'legacy text');
+
+      service.insertText(doc, 7, 'plain ');
+
+      expect(doc.share.get('content')).toBeInstanceOf(Y.Text);
+      expect(service.extractText(doc)).toBe('legacy plain text');
+    });
   });
 
   describe('describeUpdate', () => {
@@ -259,6 +296,43 @@ describe('YjsService', () => {
         type: 'yjs_update',
         payload: { struct_count: expect.any(Number) },
         receivedClock: expect.any(Number),
+      });
+    });
+
+    it('classifies a format op as format even when its diff carries a historical delete set', () => {
+      // Reproduces how AI edits are encoded: encodeStateAsUpdate always serialises the
+      // doc's FULL delete set, so a pure format op co-travels with earlier tombstones.
+      // hasDeletes is therefore true, but the op is still a format — not a delete.
+      const doc = new Y.Doc();
+      const text = doc.getText('content');
+      text.insert(0, 'hello world');
+      text.delete(0, 1); // historical tombstone, unrelated to the format below
+
+      const vectorBefore = Y.encodeStateVector(doc);
+      text.format(1, 5, { bold: true });
+      const update = Buffer.from(Y.encodeStateAsUpdate(doc, vectorBefore));
+
+      // Sanity: the diff really does carry a delete set that would previously win.
+      expect(Y.decodeUpdate(update).ds.clients.size).toBeGreaterThan(0);
+
+      expect(service.classifyUpdate(update)).toMatchObject({
+        type: 'format',
+        payload: { formatting: { bold: true } },
+      });
+    });
+
+    it('classifies a pure deletion as delete', () => {
+      const doc = new Y.Doc();
+      const text = doc.getText('content');
+      text.insert(0, 'hello world');
+
+      const vectorBefore = Y.encodeStateVector(doc);
+      text.delete(0, 5);
+      const update = Buffer.from(Y.encodeStateAsUpdate(doc, vectorBefore));
+
+      expect(service.classifyUpdate(update)).toMatchObject({
+        type: 'delete',
+        payload: { delete_id: expect.any(String) },
       });
     });
   });
