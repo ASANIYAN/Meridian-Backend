@@ -39,6 +39,55 @@ describe('YjsService', () => {
     });
   });
 
+  describe('materializeContentType', () => {
+    // Rebuilds a doc the way AiService.reconstructDocument does: purely by applying a
+    // binary update, so 'content' starts as a bare AbstractType until materialized.
+    const reconstructFromUpdate = (source: Y.Doc): Y.Doc => {
+      const doc = new Y.Doc();
+      Y.applyUpdate(doc, Y.encodeStateAsUpdate(source));
+      return doc;
+    };
+
+    it('materializes rich content as an XmlFragment so edits land inside the structure', () => {
+      const source = new Y.Doc();
+      const fragment = source.getXmlFragment('content');
+      const paragraph = new Y.XmlElement('paragraph');
+      const text = new Y.XmlText();
+      text.insert(0, 'hello world');
+      paragraph.insert(0, [text]);
+      fragment.insert(0, [paragraph]);
+
+      const doc = reconstructFromUpdate(source);
+      // Without materialization the type is a bare AbstractType and this insert would
+      // land as raw text at the fragment root (invisible to the rich editor).
+      service.materializeContentType(doc);
+      service.insertText(doc, 6, 'rich ');
+
+      const rendered = service.extractText(doc);
+      expect(rendered).toBe('hello rich world');
+      // Materialization assigned the concrete XmlFragment type, so the edit is nested
+      // inside the rich structure rather than dropped as raw text at the fragment root.
+      expect(doc.share.get('content')).toBeInstanceOf(Y.XmlFragment);
+    });
+
+    it('materializes plain content as Y.Text', () => {
+      const source = new Y.Doc();
+      source.getText('content').insert(0, 'hello world');
+
+      const doc = reconstructFromUpdate(source);
+      service.materializeContentType(doc);
+      service.insertText(doc, 6, 'plain ');
+
+      expect(service.extractText(doc)).toBe('hello plain world');
+      expect(doc.share.get('content')).toBeInstanceOf(Y.Text);
+    });
+
+    it('is a no-op for a doc with no content yet', () => {
+      const doc = new Y.Doc();
+      expect(() => service.materializeContentType(doc)).not.toThrow();
+    });
+  });
+
   describe('extractText', () => {
     it('returns the plain text content of a Y.Doc', () => {
       const doc = new Y.Doc();

@@ -27,6 +27,46 @@ export class YjsService {
     Y.applyUpdate(doc, update);
   }
 
+  // After a doc is reconstructed purely from binary updates, its top-level 'content'
+  // type is integrated as a bare AbstractType — Yjs only assigns the concrete
+  // constructor (Y.XmlFragment vs Y.Text) when application code first accesses the type
+  // through the matching getter. Until that happens every `instanceof Y.XmlFragment`
+  // check below is false, so rich-text docs fall through to the plain-text path and
+  // edits land as raw strings at the fragment root (invisible to ProseMirror). Detect
+  // the intended type from the integrated structure and materialize it once, up front.
+  materializeContentType(doc: Y.Doc): void {
+    const content = this.getExistingContentType(doc);
+    // Nothing integrated yet, or already materialized by a prior getter call.
+    if (
+      !content ||
+      content instanceof Y.XmlFragment ||
+      content instanceof Y.Text
+    ) {
+      return;
+    }
+
+    if (this.looksLikeXmlFragment(content)) {
+      doc.getXmlFragment('content');
+    } else {
+      doc.getText('content');
+    }
+  }
+
+  // An XmlFragment's children are nested types (XmlElement/XmlText → ContentType), while
+  // a plain Y.Text holds character runs (ContentString). The first non-deleted item tells
+  // the two apart. Defaults to plain text when the type is empty or ambiguous.
+  private looksLikeXmlFragment(type: Y.AbstractType<unknown>): boolean {
+    let item = type._start;
+    while (item) {
+      if (!item.deleted) {
+        if (item.content instanceof Y.ContentType) return true;
+        if (item.content instanceof Y.ContentString) return false;
+      }
+      item = item.right;
+    }
+    return false;
+  }
+
   // Returns the plain text content of the shared 'content' text type in the doc.
   extractText(doc: Y.Doc): string {
     const content = this.getExistingContentType(doc);
