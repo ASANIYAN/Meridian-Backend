@@ -193,7 +193,9 @@ export class YjsService {
     parent.insert(blockIndex + 1, [...middle, last]);
   }
 
-  // Deletes a flat character range, splitting it across every XmlText node it spans.
+  // Deletes a flat character range, splitting it across every XmlText node it spans. Any
+  // top-level block the delete empties is pruned, so "delete this paragraph" removes the
+  // block instead of leaving a blank line (an all-empty doc keeps one empty paragraph).
   deleteText(doc: Y.Doc, start: number, length: number): void {
     const content = this.resolveWritableContent(doc);
     if (content instanceof Y.Text) {
@@ -202,14 +204,59 @@ export class YjsService {
     }
 
     const xmlTextNodes = this.linearizeXmlText(content);
+    const affectedBlocks = new Set<Y.XmlElement>();
     this.forEachXmlTextRange(
       xmlTextNodes,
       start,
       length,
       (node, from, size) => {
         node.delete(from, size);
+        const block = this.topLevelBlock(content, node);
+        if (block) affectedBlocks.add(block);
       },
     );
+
+    this.pruneEmptyBlocks(content, affectedBlocks);
+  }
+
+  // Walks up from an inline node to the top-level block (direct child of the fragment)
+  // that contains it, or null if it isn't nested under one.
+  private topLevelBlock(
+    fragment: Y.XmlFragment,
+    node: Y.XmlText,
+  ): Y.XmlElement | null {
+    let current: Y.AbstractType<unknown> | null = node.parent;
+    while (current && current.parent && current.parent !== fragment) {
+      current = current.parent;
+    }
+    return current instanceof Y.XmlElement && current.parent === fragment
+      ? current
+      : null;
+  }
+
+  // Removes blocks the delete emptied, keeping at least one block so the document is never
+  // an empty fragment (which can't hydrate — an empty ProseMirror doc is one <paragraph>).
+  // Only the blocks the delete touched are considered, so intentionally-empty blocks
+  // elsewhere are left untouched.
+  private pruneEmptyBlocks(
+    fragment: Y.XmlFragment,
+    affectedBlocks: Set<Y.XmlElement>,
+  ): void {
+    for (const block of affectedBlocks) {
+      if (fragment.length <= 1) break;
+      if (!this.blockIsEmpty(block)) continue;
+      const index = (fragment.toArray() as unknown[]).indexOf(block);
+      if (index >= 0) fragment.delete(index, 1);
+    }
+  }
+
+  // True when a block holds no text. Launders through `unknown` so the value narrows to
+  // Y.AbstractType (Yjs's XML types aren't directly assignable to AbstractType<unknown>).
+  private blockIsEmpty(block: Y.XmlElement): boolean {
+    const node: unknown = block;
+    return node instanceof Y.AbstractType
+      ? this.extractInlineText(node) === ''
+      : true;
   }
 
   // Applies formatting marks (bold, italic, …) to a flat character range across every

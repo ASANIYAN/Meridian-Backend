@@ -294,11 +294,12 @@ describe('YjsService', () => {
         .getXmlFragment('content')
         .insert(0, [buildParagraph('alpha'), buildParagraph('beta')]);
 
-      // 'alpha\n\nbeta' — delete 'beta' (starts after 'alpha' + separator).
+      // 'alpha\n\nbeta' — delete 'beta' (starts after 'alpha' + separator). Correct offset
+      // alignment means exactly 'beta' is removed, emptying and pruning its block.
       const start = 'alpha\n\n'.length;
       service.deleteText(doc, start, 'beta'.length);
 
-      expect(service.extractText(doc)).toBe('alpha\n\n');
+      expect(service.extractText(doc)).toBe('alpha');
     });
 
     it('seeds multiple paragraphs when first-authoring block-separated text', () => {
@@ -309,6 +310,63 @@ describe('YjsService', () => {
       const fragment = doc.getXmlFragment('content');
       expect(fragment.length).toBe(2);
       expect(service.extractText(doc)).toBe('one\n\ntwo');
+    });
+  });
+
+  describe('delete block pruning', () => {
+    const buildParagraph = (text: string): Y.XmlElement => {
+      const paragraph = new Y.XmlElement('paragraph');
+      const xmlText = new Y.XmlText();
+      xmlText.insert(0, text);
+      paragraph.insert(0, [xmlText]);
+      return paragraph;
+    };
+
+    it('removes a block the delete empties instead of leaving a blank line', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+      fragment.insert(0, [buildParagraph('alpha'), buildParagraph('beta')]);
+
+      // Delete all of 'beta' (offset after 'alpha' + separator).
+      service.deleteText(doc, 'alpha\n\n'.length, 'beta'.length);
+
+      expect(fragment.length).toBe(1);
+      expect(service.extractText(doc)).toBe('alpha');
+    });
+
+    it('keeps a single empty paragraph when the whole document is emptied', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+      fragment.insert(0, [buildParagraph('hello')]);
+
+      service.deleteText(doc, 0, 'hello'.length);
+
+      expect(fragment.length).toBe(1);
+      expect(fragment.get(0)).toBeInstanceOf(Y.XmlElement);
+      expect(service.extractText(doc)).toBe('');
+    });
+
+    it('does not prune a block that is only partially deleted', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+      fragment.insert(0, [buildParagraph('hello world')]);
+
+      service.deleteText(doc, 'hello '.length, 'world'.length);
+
+      expect(fragment.length).toBe(1);
+      expect(service.extractText(doc)).toBe('hello ');
+    });
+
+    it('leaves intentionally-empty blocks the delete did not touch', () => {
+      const doc = new Y.Doc();
+      const fragment = doc.getXmlFragment('content');
+      fragment.insert(0, [buildParagraph('keep me'), buildParagraph('')]);
+
+      // Delete inside the first block only; the trailing empty block is untouched.
+      service.deleteText(doc, 0, 'keep '.length);
+
+      expect(fragment.length).toBe(2);
+      expect(service.extractText(doc)).toBe('me\n\n');
     });
   });
 
