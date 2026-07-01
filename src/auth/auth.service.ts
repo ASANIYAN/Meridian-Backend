@@ -94,12 +94,17 @@ export class AuthService {
       rawToken,
       tokenHash,
       expiresAt,
+      expiryHours,
     };
   }
 
-  private async sendVerificationEmail(email: string, token: string) {
+  private async sendVerificationEmail(
+    email: string,
+    token: string,
+    expiryHours: number,
+  ) {
     try {
-      await this.mailService.sendVerificationEmail(email, token);
+      await this.mailService.sendVerificationEmail(email, token, expiryHours);
       this.logger.log(`Successfully sent verification email to ${email}`);
       return true;
     } catch (error) {
@@ -110,8 +115,12 @@ export class AuthService {
     }
   }
 
-  private queueVerificationEmail(email: string, token: string) {
-    void this.sendVerificationEmail(email, token);
+  private queueVerificationEmail(
+    email: string,
+    token: string,
+    expiryHours: number,
+  ) {
+    void this.sendVerificationEmail(email, token, expiryHours);
   }
 
   private async generatePasswordResetToken() {
@@ -126,12 +135,17 @@ export class AuthService {
       rawToken,
       tokenHash,
       expiresAt,
+      expiryHours,
     };
   }
 
-  private async sendPasswordResetEmail(email: string, token: string) {
+  private async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    expiryHours: number,
+  ) {
     try {
-      await this.mailService.sendPasswordResetEmail(email, token);
+      await this.mailService.sendPasswordResetEmail(email, token, expiryHours);
       this.logger.log(`Successfully sent password reset email to ${email}`);
       return true;
     } catch (error) {
@@ -142,8 +156,12 @@ export class AuthService {
     }
   }
 
-  private queuePasswordResetEmail(email: string, token: string) {
-    void this.sendPasswordResetEmail(email, token);
+  private queuePasswordResetEmail(
+    email: string,
+    token: string,
+    expiryHours: number,
+  ) {
+    void this.sendPasswordResetEmail(email, token, expiryHours);
   }
 
   private toSafeUser(user: typeof schema.users.$inferSelect): SafeUser {
@@ -191,7 +209,11 @@ export class AuthService {
 
       this.logger.log(`Created user account for ${email}`);
 
-      this.queueVerificationEmail(email, verificationToken.rawToken);
+      this.queueVerificationEmail(
+        email,
+        verificationToken.rawToken,
+        verificationToken.expiryHours,
+      );
 
       return {
         user: this.toSafeUser(user),
@@ -296,7 +318,11 @@ export class AuthService {
         .returning();
 
       this.logger.log(`Updated verification token and hash for ${email}`);
-      this.queueVerificationEmail(email, verificationToken.rawToken);
+      this.queueVerificationEmail(
+        email,
+        verificationToken.rawToken,
+        verificationToken.expiryHours,
+      );
 
       return { accepted: true };
     } catch (error) {
@@ -381,7 +407,11 @@ export class AuthService {
         expiresAt: resetToken.expiresAt,
       });
 
-      this.queuePasswordResetEmail(email, resetToken.rawToken);
+      this.queuePasswordResetEmail(
+        email,
+        resetToken.rawToken,
+        resetToken.expiryHours,
+      );
       return { accepted: true };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
