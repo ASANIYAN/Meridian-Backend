@@ -21,6 +21,8 @@ import {
 import { DocumentsService } from './documents.service';
 import { MembershipsService } from '../memberships/memberships.service';
 
+type MockFn = jest.Mock<(...args: any[]) => any>;
+
 // Builds a minimal ExecutionContext whose request carries the supplied fields.
 // The returned `request` object is mutable so tests can inspect side-effects
 // (e.g. checking that membershipRole was written).
@@ -46,7 +48,7 @@ function createMockContext(fields: {
 
 describe('DocumentExistsGuard', () => {
   let guard: DocumentExistsGuard;
-  let documentsService: { getDocumentById: jest.Mock };
+  let documentsService: { getDocumentById: MockFn };
 
   beforeEach(() => {
     documentsService = { getDocumentById: jest.fn() };
@@ -100,7 +102,7 @@ describe('DocumentExistsGuard', () => {
 
 describe('DocumentMembershipGuard', () => {
   let guard: DocumentMembershipGuard;
-  let membershipsService: { getUserDocumentMembership: jest.Mock };
+  let membershipsService: { getUserDocumentMembership: MockFn };
 
   beforeEach(() => {
     membershipsService = { getUserDocumentMembership: jest.fn() };

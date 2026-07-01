@@ -11,6 +11,8 @@ import { Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { RedisService } from '../../redis/redis.service';
 
+type MockFn = jest.Mock<(...args: any[]) => any>;
+
 function createMockContext(user?: object): ExecutionContext {
   const request = { user };
   return {
@@ -24,9 +26,9 @@ function createMockContext(user?: object): ExecutionContext {
 
 describe('JwtAuthGuard', () => {
   let guard: JwtAuthGuard;
-  let reflector: { getAllAndOverride: jest.Mock };
-  let redisService: { isTokenBlacklisted: jest.Mock };
-  let superCanActivate: jest.Mock;
+  let reflector: { getAllAndOverride: MockFn };
+  let redisService: { isTokenBlacklisted: MockFn };
+  let superCanActivate: MockFn;
 
   beforeEach(() => {
     reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };

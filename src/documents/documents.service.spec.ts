@@ -13,6 +13,12 @@ import { DATABASE_CONNECTION } from '../database/database-connection';
 import { MembershipsService } from '../memberships/memberships.service';
 import { ShareLinksService } from '../share_links/share_links.service';
 
+type MockFn = jest.Mock<(...args: any[]) => any>;
+
+function mockFn(): MockFn {
+  return jest.fn<(...args: any[]) => any>();
+}
+
 describe('DocumentsService', () => {
   let service: DocumentsService;
   let database: ReturnType<typeof createDatabaseMock>;
@@ -59,13 +65,13 @@ describe('DocumentsService', () => {
       };
 
       // First tx.insert (documents): .values().returning() → [documentRow]
-      const returningDocs = jest.fn().mockResolvedValue([documentRow]);
+      const returningDocs = mockFn().mockResolvedValue([documentRow]);
       const valuesDocs = jest
         .fn()
         .mockReturnValue({ returning: returningDocs });
 
       // Second tx.insert (memberships): .values() is awaited directly (no .returning())
-      const valuesMems = jest.fn().mockResolvedValue(undefined);
+      const valuesMems = mockFn().mockResolvedValue(undefined);
 
       const tx = {
         insert: jest
@@ -74,7 +80,7 @@ describe('DocumentsService', () => {
           .mockReturnValueOnce({ values: valuesMems }),
       };
       database.transaction.mockImplementation(
-        (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx),
+        (fn: (_tx: typeof tx) => Promise<unknown>) => fn(tx),
       );
 
       const result = await service.createDocument('My Doc', 'user-1');
@@ -102,11 +108,11 @@ describe('DocumentsService', () => {
         updatedAt: new Date(),
       };
 
-      const returningDocs = jest.fn().mockResolvedValue([documentRow]);
+      const returningDocs = mockFn().mockResolvedValue([documentRow]);
       const valuesDocs = jest
         .fn()
         .mockReturnValue({ returning: returningDocs });
-      const valuesMems = jest.fn().mockResolvedValue(undefined);
+      const valuesMems = mockFn().mockResolvedValue(undefined);
 
       const tx = {
         insert: jest
@@ -115,7 +121,7 @@ describe('DocumentsService', () => {
           .mockReturnValueOnce({ values: valuesMems }),
       };
       database.transaction.mockImplementation(
-        (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx),
+        (fn: (_tx: typeof tx) => Promise<unknown>) => fn(tx),
       );
 
       const result = await service.createDocument('Test', 'user-1');
@@ -130,8 +136,8 @@ describe('DocumentsService', () => {
 
   describe('softDeleteDocument', () => {
     it('calls update with status "deleted" and does not call delete', async () => {
-      const where = jest.fn().mockResolvedValue(undefined);
-      const set = jest.fn().mockReturnValue({ where });
+      const where = mockFn().mockResolvedValue(undefined);
+      const set = mockFn().mockReturnValue({ where });
       database.update.mockReturnValue({ set });
 
       await service.softDeleteDocument('doc-1');
@@ -144,8 +150,8 @@ describe('DocumentsService', () => {
     });
 
     it('targets the correct documentId in the where clause', async () => {
-      const where = jest.fn().mockResolvedValue(undefined);
-      const set = jest.fn().mockReturnValue({ where });
+      const where = mockFn().mockResolvedValue(undefined);
+      const set = mockFn().mockReturnValue({ where });
       database.update.mockReturnValue({ set });
 
       await service.softDeleteDocument('doc-42');
@@ -252,8 +258,8 @@ describe('DocumentsService', () => {
     it('returns the document row when found', async () => {
       const documentRow = { id: 'doc-1', title: 'Test', status: 'active' };
 
-      const where = jest.fn().mockResolvedValue([documentRow]);
-      const from = jest.fn().mockReturnValue({ where });
+      const where = mockFn().mockResolvedValue([documentRow]);
+      const from = mockFn().mockReturnValue({ where });
       database.select.mockReturnValue({ from });
 
       const result = await service.getDocumentById('doc-1');
@@ -262,8 +268,8 @@ describe('DocumentsService', () => {
     });
 
     it('returns undefined when not found', async () => {
-      const where = jest.fn().mockResolvedValue([]);
-      const from = jest.fn().mockReturnValue({ where });
+      const where = mockFn().mockResolvedValue([]);
+      const from = mockFn().mockReturnValue({ where });
       database.select.mockReturnValue({ from });
 
       const result = await service.getDocumentById('doc-missing');
@@ -286,18 +292,18 @@ describe('DocumentsService', () => {
       };
 
       // First select: the paginated document+role query
-      const offset = jest.fn().mockResolvedValue([docWithRole]);
-      const limit = jest.fn().mockReturnValue({ offset });
-      const orderBy = jest.fn().mockReturnValue({ limit });
-      const whereFirst = jest.fn().mockReturnValue({ orderBy });
-      const innerJoinFirst = jest.fn().mockReturnValue({ where: whereFirst });
+      const offset = mockFn().mockResolvedValue([docWithRole]);
+      const limit = mockFn().mockReturnValue({ offset });
+      const orderBy = mockFn().mockReturnValue({ limit });
+      const whereFirst = mockFn().mockReturnValue({ orderBy });
+      const innerJoinFirst = mockFn().mockReturnValue({ where: whereFirst });
       const fromFirst = jest
         .fn()
         .mockReturnValue({ innerJoin: innerJoinFirst });
 
       // Second select: the count query
-      const whereSecond = jest.fn().mockResolvedValue([{ count: 1 }]);
-      const innerJoinSecond = jest.fn().mockReturnValue({ where: whereSecond });
+      const whereSecond = mockFn().mockResolvedValue([{ count: 1 }]);
+      const innerJoinSecond = mockFn().mockReturnValue({ where: whereSecond });
       const fromSecond = jest
         .fn()
         .mockReturnValue({ innerJoin: innerJoinSecond });
@@ -325,12 +331,12 @@ describe('DocumentsService', () => {
       const documentRow = { id: 'doc-1', title: 'Test', status: 'active' };
 
       // First select: getDocumentById (select().from().where())
-      const whereFirst = jest.fn().mockResolvedValue([documentRow]);
-      const fromFirst = jest.fn().mockReturnValue({ where: whereFirst });
+      const whereFirst = mockFn().mockResolvedValue([documentRow]);
+      const fromFirst = mockFn().mockReturnValue({ where: whereFirst });
 
       // Second select: count query (select().from().where())
-      const whereSecond = jest.fn().mockResolvedValue([{ count: 3 }]);
-      const fromSecond = jest.fn().mockReturnValue({ where: whereSecond });
+      const whereSecond = mockFn().mockResolvedValue([{ count: 3 }]);
+      const fromSecond = mockFn().mockReturnValue({ where: whereSecond });
 
       database.select
         .mockReturnValueOnce({ from: fromFirst })
@@ -348,9 +354,9 @@ describe('DocumentsService', () => {
     it('returns the updated document row', async () => {
       const updatedDoc = { id: 'doc-1', title: 'New Title', status: 'active' };
 
-      const returning = jest.fn().mockResolvedValue([updatedDoc]);
-      const where = jest.fn().mockReturnValue({ returning });
-      const set = jest.fn().mockReturnValue({ where });
+      const returning = mockFn().mockResolvedValue([updatedDoc]);
+      const where = mockFn().mockReturnValue({ returning });
+      const set = mockFn().mockReturnValue({ where });
       database.update.mockReturnValue({ set });
 
       const result = await service.updateDocumentTitle('doc-1', 'New Title');
@@ -368,9 +374,9 @@ describe('DocumentsService', () => {
     it('returns the document with the updated status', async () => {
       const updatedDoc = { id: 'doc-1', title: 'Test', status: 'inactive' };
 
-      const returning = jest.fn().mockResolvedValue([updatedDoc]);
-      const where = jest.fn().mockReturnValue({ returning });
-      const set = jest.fn().mockReturnValue({ where });
+      const returning = mockFn().mockResolvedValue([updatedDoc]);
+      const where = mockFn().mockReturnValue({ returning });
+      const set = mockFn().mockReturnValue({ where });
       database.update.mockReturnValue({ set });
 
       const result = await service.updateDocumentStatus('doc-1', 'inactive');
@@ -397,9 +403,9 @@ describe('DocumentsService', () => {
         },
       ];
 
-      const where = jest.fn().mockResolvedValue(members);
-      const innerJoin = jest.fn().mockReturnValue({ where });
-      const from = jest.fn().mockReturnValue({ innerJoin });
+      const where = mockFn().mockResolvedValue(members);
+      const innerJoin = mockFn().mockReturnValue({ where });
+      const from = mockFn().mockReturnValue({ innerJoin });
       database.select.mockReturnValue({ from });
 
       const result = await service.getDocumentMembers('doc-1');
@@ -422,8 +428,8 @@ describe('DocumentsService', () => {
     const documentRow = { id: 'doc-1', title: 'Test', status: 'active' };
 
     function setupGetDocumentById() {
-      const where = jest.fn().mockResolvedValue([documentRow]);
-      const from = jest.fn().mockReturnValue({ where });
+      const where = mockFn().mockResolvedValue([documentRow]);
+      const from = mockFn().mockReturnValue({ where });
       database.select.mockReturnValue({ from });
     }
 
@@ -519,27 +525,27 @@ describe('DocumentsService', () => {
 
 function createDatabaseMock() {
   return {
-    select: jest.fn(),
-    insert: jest.fn(),
-    update: jest.fn(),
-    delete: jest.fn(),
-    transaction: jest.fn(),
+    select: jest.fn<(...args: any[]) => any>(),
+    insert: jest.fn<(...args: any[]) => any>(),
+    update: jest.fn<(...args: any[]) => any>(),
+    delete: jest.fn<(...args: any[]) => any>(),
+    transaction: jest.fn<(...args: any[]) => any>(),
   };
 }
 
 function createMembershipsServiceMock() {
   return {
-    addMember: jest.fn(),
-    getUserDocumentMembership: jest.fn(),
-    updateMemberRole: jest.fn(),
-    removeMember: jest.fn(),
-    addMemberViaLink: jest.fn(),
+    addMember: jest.fn<(...args: any[]) => any>(),
+    getUserDocumentMembership: jest.fn<(...args: any[]) => any>(),
+    updateMemberRole: jest.fn<(...args: any[]) => any>(),
+    removeMember: jest.fn<(...args: any[]) => any>(),
+    addMemberViaLink: jest.fn<(...args: any[]) => any>(),
   };
 }
 
 function createShareLinksServiceMock() {
   return {
-    findAndValidateLink: jest.fn(),
-    markLinkAsClaimed: jest.fn(),
+    findAndValidateLink: jest.fn<(...args: any[]) => any>(),
+    markLinkAsClaimed: jest.fn<(...args: any[]) => any>(),
   };
 }
