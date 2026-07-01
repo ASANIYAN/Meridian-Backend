@@ -16,7 +16,7 @@ Meridian is a NestJS backend for collaborative document editing. Multiple users 
 | Real-time sync | Yjs · `@nestjs/platform-ws`              |
 | Auth           | Passport-JWT · `@nestjs/jwt`             |
 | AI             | `@google/generative-ai` (Gemini 3 Flash) |
-| Email          | Resend                                   |
+| Email          | Brevo                                    |
 | Rate limiting  | `@nestjs/throttler` backed by Redis      |
 | API docs       | Swagger / OpenAPI (`@nestjs/swagger`)    |
 | Testing        | Jest · Supertest                         |
@@ -36,7 +36,7 @@ Meridian is a NestJS backend for collaborative document editing. Multiple users 
 - npm
 - Docker (for Postgres + Redis)
 - A [Google Gemini API key](https://aistudio.google.com/app/apikey) (for the AI chat endpoint)
-- A [Resend](https://resend.com) API key and verified sending domain/address (for email verification, password reset, and document invitations)
+- A [Brevo](https://brevo.com) API key and a verified sender email or domain (for email verification, password reset, and document invitations)
 
 ## Local Setup
 
@@ -80,9 +80,9 @@ EMAIL_VERIFICATION_TOKEN_EXPIRY_HOURS=24
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS=1
 PASSWORD_RESET_MAX_ATTEMPTS=3
 
-# Email (Resend)
-RESEND_API_KEY=
-RESEND_FROM_EMAIL=
+# Email (Brevo)
+BREVO_API_KEY=
+BREVO_FROM_EMAIL=
 
 # Gemini
 GEMINI_API_KEY=
@@ -192,7 +192,7 @@ src/
 ├── ai/              Gemini integration for natural-language document edits
 ├── share_links/     Invitation link generation and claiming
 ├── redis/           Redis client, pub/sub, JWT blacklist, throttler storage
-├── mail/            Transactional email via Resend
+├── mail/            Transactional email via Brevo
 ├── health/          Health check endpoint (DB + Redis probes)
 ├── common/          Shared filters, guards, DTOs, Swagger utilities
 └── config/          Env validation schema (Joi)
