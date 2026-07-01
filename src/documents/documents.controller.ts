@@ -11,6 +11,7 @@ import {
   Query,
   Req,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
@@ -68,6 +69,8 @@ import { AcceptProposalRequestDto } from '../ai/dto/accept-proposal-request.dto'
 @ApiTags('Documents')
 @Controller('documents')
 export class DocumentsController {
+  private readonly logger = new Logger(DocumentsController.name);
+
   constructor(
     private readonly documentService: DocumentsService,
     private readonly sharelinksService: ShareLinksService,
@@ -740,6 +743,15 @@ export class DocumentsController {
     @Req() request: Request & { user: JwtPayload },
     @Body() body: ChatRequestDto,
   ): Promise<SuccessResponse<ChatResponseDto>> {
+    this.logger.log(
+      `AI chat request: ${JSON.stringify({
+        endpoint: 'chat',
+        documentId,
+        userId: request.user.userId,
+        body,
+      })}`,
+    );
+
     const result = await this.aiService.chat(
       documentId,
       request.user.userId,
@@ -812,6 +824,15 @@ export class DocumentsController {
     @Req() request: Request & { user: JwtPayload },
     @Body() body: ChatRequestDto,
   ): Promise<SuccessResponse<ProposeChatResponseDto>> {
+    this.logger.log(
+      `AI chat request: ${JSON.stringify({
+        endpoint: 'propose',
+        documentId,
+        userId: request.user.userId,
+        body,
+      })}`,
+    );
+
     const result = await this.aiService.proposeChat(
       documentId,
       request.user.userId,

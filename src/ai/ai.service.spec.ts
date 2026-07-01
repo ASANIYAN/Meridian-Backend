@@ -2,6 +2,7 @@ import * as Y from 'yjs';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { ConflictException } from '@nestjs/common';
 import { AiService } from './ai.service';
 import { YjsService } from '../yjs/yjs.service';
 import { SnapshotsService } from '../snapshots/snapshots.service';
@@ -57,6 +58,7 @@ describe('AiService', () => {
     peekProposal: jest.fn<(...args: any[]) => any>(),
     consumeProposal: jest.fn<(...args: any[]) => any>(),
     deleteProposal: jest.fn<(...args: any[]) => any>(),
+    publish: jest.fn<(...args: any[]) => any>(),
   };
 
   const mockConfigService: { get: MockFn; getOrThrow: MockFn } = {
@@ -86,6 +88,7 @@ describe('AiService', () => {
     mockRedisService.stageProposal.mockResolvedValue(undefined);
     mockRedisService.consumeProposal.mockResolvedValue('claimed');
     mockRedisService.deleteProposal.mockResolvedValue(undefined);
+    mockRedisService.publish.mockResolvedValue(1);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -105,6 +108,45 @@ describe('AiService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('checkScope', () => {
+    it('asks the validator to judge the net edit instead of isolated delete and insert ops', async () => {
+      const generateSpy = jest
+        .spyOn(service as any, 'generateJson')
+        .mockResolvedValue(
+          JSON.stringify({ scope_valid: true, violation_reason: null }),
+        );
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+      await (service as any).checkScope(
+        'Write in detail about the roles of a software developer',
+        [
+          {
+            type: 'delete',
+            start: 0,
+            end: 31,
+            expected_text: 'Full-stack Software Engineering',
+          },
+          {
+            type: 'insert',
+            position: 0,
+            text: 'The Role of a Software Developer...',
+          },
+        ],
+        'Full-stack Software Engineering',
+        'The Role of a Software Developer...',
+      );
+
+      expect(generateSpy).toHaveBeenCalledWith(
+        expect.stringContaining('NET EDIT'),
+        expect.stringContaining('Proposed document preview'),
+        300,
+      );
+      expect(generateSpy.mock.calls[0][0]).toContain(
+        'Treat delete+insert pairs',
+      );
+    });
   });
 
   describe('chat — Yjs translation and pipeline', () => {
@@ -303,6 +345,231 @@ describe('AiService', () => {
       expect(mockOutboxService.enqueueDelivery).not.toHaveBeenCalled();
     });
 
+    it('relocates exact text when the model returns a nearby stale offset', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('Alpha Frontend Engineering Beta'),
+        operationSequence: 0,
+      });
+      jest.spyOn(service as any, 'callLLM').mockResolvedValue(
+        JSON.stringify([
+          {
+            type: 'delete',
+            start: 8,
+            end: 28,
+            expected_text: 'Frontend Engineering',
+          },
+          {
+            type: 'insert',
+            position: 8,
+            text: 'FullStack Software Engineering',
+          },
+        ]),
+      );
+      jest.spyOn(service as any, 'checkScope').mockResolvedValue(undefined);
+
+      const result = await service.proposeChat(
+        'doc-id',
+        'user-id',
+        'replace role',
+      );
+
+      expect(result.diff).toEqual({
+        before: 'Alpha Frontend Engineering Beta',
+        after: 'Alpha FullStack Software Engineering Beta',
+      });
+      expect(mockRedisService.stageProposal).toHaveBeenCalledTimes(1);
+      const staged = JSON.parse(
+        mockRedisService.stageProposal.mock.calls[0][1] as string,
+      ) as { operations: Array<{ start?: number; position?: number }> };
+      expect(staged.operations).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ start: 6, end: 26 }),
+          expect.objectContaining({ position: 6 }),
+        ]),
+      );
+    });
+
+    it('resolves an insert anchor to append at the end even when position is wrong', async () => {
+      // The doc ends in "...enhances interaction." The model asks to append after the
+      // last sentence but guesses a position that lands mid-word ("intera|ction").
+      // The anchor quote of the final words must override that offset.
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('Growth enhances interaction.'),
+        operationSequence: 0,
+      });
+      jest.spyOn(service as any, 'callLLM').mockResolvedValue(
+        JSON.stringify([
+          {
+            type: 'insert',
+            position: 22,
+            text: ' It compounds over time.',
+            anchor_text: 'enhances interaction.',
+            anchor_position: 'after',
+          },
+        ]),
+      );
+      jest.spyOn(service as any, 'checkScope').mockResolvedValue(undefined);
+
+      const result = await service.proposeChat('doc-id', 'user-id', 'append');
+
+      expect(result.diff).toEqual({
+        before: 'Growth enhances interaction.',
+        after: 'Growth enhances interaction. It compounds over time.',
+      });
+      const staged = JSON.parse(
+        mockRedisService.stageProposal.mock.calls[0][1] as string,
+      ) as { operations: Array<{ position?: number }> };
+      expect(staged.operations[0]).toEqual(
+        expect.objectContaining({ position: 28 }),
+      );
+    });
+
+    it('rejects an insert whose anchor text is not in the document', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('Growth enhances interaction.'),
+        operationSequence: 0,
+      });
+      jest.spyOn(service as any, 'callLLM').mockResolvedValue(
+        JSON.stringify([
+          {
+            type: 'insert',
+            position: 10,
+            text: ' New text.',
+            anchor_text: 'text that is absent',
+            anchor_position: 'after',
+          },
+        ]),
+      );
+      const scopeSpy = jest.spyOn(service as any, 'checkScope');
+
+      await expect(
+        service.proposeChat('doc-id', 'user-id', 'append'),
+      ).rejects.toThrow(ConflictException);
+
+      expect(scopeSpy).not.toHaveBeenCalled();
+      expect(mockRedisService.stageProposal).not.toHaveBeenCalled();
+    });
+
+    it('anchors replacement text across rendered whitespace variants', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('Alpha Frontend\u00a0Engineer Beta'),
+        operationSequence: 0,
+      });
+      jest.spyOn(service as any, 'callLLM').mockResolvedValue(
+        JSON.stringify([
+          {
+            type: 'delete',
+            start: 99,
+            end: 116,
+            expected_text: 'Frontend Engineer',
+          },
+          {
+            type: 'insert',
+            position: 99,
+            text: 'Software Developer',
+          },
+        ]),
+      );
+      jest.spyOn(service as any, 'checkScope').mockResolvedValue(undefined);
+
+      const result = await service.proposeChat(
+        'doc-id',
+        'user-id',
+        'replace role',
+      );
+
+      expect(result.diff).toEqual({
+        before: 'Alpha Frontend\u00a0Engineer Beta',
+        after: 'Alpha Software Developer Beta',
+      });
+    });
+
+    it('applies multiple replacements from the back so earlier edits do not shift later ranges', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob(
+          'Frontend Engineering and Frontend Engineering',
+        ),
+        operationSequence: 0,
+      });
+      jest.spyOn(service as any, 'callLLM').mockResolvedValue(
+        JSON.stringify([
+          {
+            type: 'delete',
+            start: 0,
+            end: 20,
+            expected_text: 'Frontend Engineering',
+          },
+          {
+            type: 'insert',
+            position: 0,
+            text: 'FullStack Software Engineering',
+          },
+          {
+            type: 'delete',
+            start: 25,
+            end: 45,
+            expected_text: 'Frontend Engineering',
+          },
+          {
+            type: 'insert',
+            position: 25,
+            text: 'FullStack Software Engineering',
+          },
+        ]),
+      );
+      jest.spyOn(service as any, 'checkScope').mockResolvedValue(undefined);
+
+      const result = await service.proposeChat(
+        'doc-id',
+        'user-id',
+        'replace both roles',
+      );
+
+      expect(result.diff.after).toBe(
+        'FullStack Software Engineering and FullStack Software Engineering',
+      );
+    });
+
+    it('does not stage a partial replacement when the delete target is missing', async () => {
+      mockSnapshotsService.getLatestSnapshot.mockResolvedValue({
+        ...SNAPSHOT_BASE,
+        contentBlob: makeSnapshotBlob('Existing document text'),
+        operationSequence: 0,
+      });
+      jest.spyOn(service as any, 'callLLM').mockResolvedValue(
+        JSON.stringify([
+          {
+            type: 'delete',
+            start: 0,
+            end: 17,
+            expected_text: 'Frontend Engineer',
+          },
+          {
+            type: 'insert',
+            position: 0,
+            text: 'Software Developer',
+          },
+        ]),
+      );
+      const scopeSpy = jest.spyOn(service as any, 'checkScope');
+
+      await expect(
+        service.proposeChat(
+          'doc-id',
+          'user-id',
+          'Replace, "Frontend Engineer" with "Software Developer"',
+        ),
+      ).rejects.toThrow(ConflictException);
+
+      expect(scopeSpy).not.toHaveBeenCalled();
+      expect(mockRedisService.stageProposal).not.toHaveBeenCalled();
+    });
+
     it('propagates a scope violation and stages nothing', async () => {
       jest
         .spyOn(service as any, 'callLLM')
@@ -369,6 +636,10 @@ describe('AiService', () => {
       expect(result).toEqual({ operations_applied: 1 });
       expect(mockRedisService.consumeProposal).toHaveBeenCalledWith('pid');
       expect(mockOperationsService.insertOperation).toHaveBeenCalledTimes(1);
+      expect(mockRedisService.publish).toHaveBeenCalledWith(
+        'doc:doc-id',
+        expect.any(Buffer),
+      );
     });
 
     it('returns 410 when the proposal is missing or expired', async () => {
