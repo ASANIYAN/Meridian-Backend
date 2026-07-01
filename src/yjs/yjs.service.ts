@@ -13,6 +13,12 @@ type LinearXmlText = {
   end: number;
 };
 
+// The flat text the AI edits against renders each top-level block on its own line,
+// separated by a blank line. A blank line in inserted text is therefore the signal to
+// start a new block (paragraph), mirroring ProseMirror's block+ structure.
+const BLOCK_SEPARATOR = '\n\n';
+const BLOCK_BREAK = /\n{2,}/;
+
 @Injectable()
 export class YjsService {
   private readonly logger = new Logger(YjsService.name);
@@ -75,7 +81,7 @@ export class YjsService {
     }
 
     if (content instanceof Y.XmlFragment) {
-      return this.extractXmlText(content);
+      return this.extractFragmentText(content);
     }
 
     // No content type integrated yet. Return empty without calling doc.getText, which
@@ -106,8 +112,18 @@ export class YjsService {
     return paragraph;
   }
 
-  // Inserts text at a flat character offset. Legacy Y.Text docs are edited directly;
-  // rich XmlFragment docs map the offset onto the XmlText node it lands in.
+  // Turns block-separated text into one <paragraph> per block, so a multi-paragraph string
+  // seeds real block structure instead of a single paragraph with literal newlines.
+  private createParagraphs(text: string): Y.XmlElement[] {
+    return text
+      .split(BLOCK_BREAK)
+      .map((segment) => this.createParagraph(segment));
+  }
+
+  // Inserts text at a flat character offset. Legacy Y.Text docs are edited directly; rich
+  // XmlFragment docs map the offset onto the XmlText node it lands in. Text carrying a
+  // blank line is split into new sibling <paragraph> blocks rather than inlined, so the AI
+  // (and seeds) can author real paragraph structure.
   insertText(doc: Y.Doc, position: number, text: string): void {
     const content = this.resolveWritableContent(doc);
     if (content instanceof Y.Text) {
@@ -119,19 +135,62 @@ export class YjsService {
     if (xmlTextNodes.length === 0) {
       // ProseMirror requires every top-level child of the content fragment to be a block
       // Y.XmlElement — a bare Y.XmlText at the root crashes y-prosemirror's hydration
-      // (el.toArray is not a function). Wrap the text in a paragraph.
-      content.insert(0, [this.createParagraph(text)]);
+      // (el.toArray is not a function). Wrap the text in one or more paragraphs.
+      content.insert(0, this.createParagraphs(text));
       return;
     }
 
     const target =
       xmlTextNodes.find((node) => position <= node.end) ??
       xmlTextNodes[xmlTextNodes.length - 1];
-
-    target.node.insert(
-      this.clamp(position - target.start, 0, target.end),
-      text,
+    const localOffset = this.clamp(
+      position - target.start,
+      0,
+      target.end - target.start,
     );
+
+    const segments = text.split(BLOCK_BREAK);
+    if (segments.length <= 1) {
+      target.node.insert(localOffset, text);
+      return;
+    }
+
+    this.insertBlocks(target.node, localOffset, segments);
+  }
+
+  // Splits the block containing `targetNode` at `localOffset` and interleaves `segments`
+  // (each a paragraph's worth of text) as sibling blocks: the first segment continues the
+  // original block, any middle segments become their own paragraphs, and the last segment
+  // is joined with the split-off tail. Assumes the split point sits in a block element with
+  // a single trailing text node (true for authored and unmarked paragraphs); trailing
+  // inline siblings, if any, stay in the original block.
+  private insertBlocks(
+    targetNode: Y.XmlText,
+    localOffset: number,
+    segments: string[],
+  ): void {
+    const block = targetNode.parent;
+    const parent = block?.parent;
+    if (
+      !(block instanceof Y.XmlElement) ||
+      !(parent instanceof Y.XmlFragment || parent instanceof Y.XmlElement)
+    ) {
+      // Structure we don't expect — fall back to an inline insert rather than misplace text.
+      targetNode.insert(localOffset, segments.join(BLOCK_SEPARATOR));
+      return;
+    }
+
+    const blockIndex = (parent.toArray() as unknown[]).indexOf(block);
+    const nodeText = String(targetNode.toString());
+    const tail = nodeText.slice(localOffset);
+
+    if (tail.length)
+      targetNode.delete(localOffset, nodeText.length - localOffset);
+    if (segments[0]) targetNode.insert(localOffset, segments[0]);
+
+    const middle = segments.slice(1, -1).map((s) => this.createParagraph(s));
+    const last = this.createParagraph(segments[segments.length - 1] + tail);
+    parent.insert(blockIndex + 1, [...middle, last]);
   }
 
   // Deletes a flat character range, splitting it across every XmlText node it spans.
@@ -354,22 +413,27 @@ export class YjsService {
     return contentSummary;
   }
 
-  // Recursively concatenates all text within an XML type (fragment/element/text) into a
-  // single plain string.
-  private extractXmlText(type: Y.AbstractType<unknown>): string {
+  // Joins each top-level block's inline text with a blank line, so the flat string mirrors
+  // the document's paragraph structure (block breaks become visible to the AI).
+  private extractFragmentText(fragment: Y.XmlFragment): string {
+    return (fragment.toArray() as unknown[])
+      .map((child) =>
+        child instanceof Y.AbstractType ? this.extractInlineText(child) : '',
+      )
+      .join(BLOCK_SEPARATOR);
+  }
+
+  // Concatenates all text inside a single block, recursing through inline elements.
+  private extractInlineText(type: Y.AbstractType<unknown>): string {
     if (type instanceof Y.XmlText) {
       return String(type.toString());
     }
 
     if (type instanceof Y.XmlElement || type instanceof Y.XmlFragment) {
       return (type.toArray() as unknown[])
-        .map((child) => {
-          if (child instanceof Y.AbstractType) {
-            return this.extractXmlText(child);
-          }
-
-          return '';
-        })
+        .map((child) =>
+          child instanceof Y.AbstractType ? this.extractInlineText(child) : '',
+        )
         .join('');
     }
 
@@ -388,30 +452,44 @@ export class YjsService {
 
   // Flattens an XmlFragment's nested XmlText nodes into a list carrying each node's
   // absolute start/end offset, so a flat character position can be mapped back to the
-  // node that owns it.
+  // node that owns it. Reserves BLOCK_SEPARATOR.length of virtual offset between
+  // top-level blocks so these offsets line up exactly with extractText's output.
   private linearizeXmlText(fragment: Y.XmlFragment): LinearXmlText[] {
     const nodes: LinearXmlText[] = [];
     let offset = 0;
 
-    const visit = (type: Y.AbstractType<unknown>) => {
-      if (type instanceof Y.XmlText) {
-        const length = String(type.toString()).length;
-        nodes.push({ node: type, start: offset, end: offset + length });
-        offset += length;
-        return;
+    (fragment.toArray() as unknown[]).forEach((child, index) => {
+      if (index > 0) offset += BLOCK_SEPARATOR.length;
+      if (child instanceof Y.AbstractType) {
+        offset = this.collectXmlText(child, offset, nodes);
       }
+    });
 
-      if (type instanceof Y.XmlElement || type instanceof Y.XmlFragment) {
-        for (const child of type.toArray() as unknown[]) {
-          if (child instanceof Y.AbstractType) {
-            visit(child);
-          }
+    return nodes;
+  }
+
+  // Appends every XmlText under `type` to `nodes` with absolute offsets, returning the
+  // offset just past the collected text.
+  private collectXmlText(
+    type: Y.AbstractType<unknown>,
+    offset: number,
+    nodes: LinearXmlText[],
+  ): number {
+    if (type instanceof Y.XmlText) {
+      const length = String(type.toString()).length;
+      nodes.push({ node: type, start: offset, end: offset + length });
+      return offset + length;
+    }
+
+    if (type instanceof Y.XmlElement) {
+      for (const child of type.toArray() as unknown[]) {
+        if (child instanceof Y.AbstractType) {
+          offset = this.collectXmlText(child, offset, nodes);
         }
       }
-    };
+    }
 
-    visit(fragment);
-    return nodes;
+    return offset;
   }
 
   // Runs callback for each XmlText node overlapping the flat range [start, start+length),
