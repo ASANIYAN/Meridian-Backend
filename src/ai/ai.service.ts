@@ -979,11 +979,8 @@ Rules: positions are 0-indexed character offsets. For "insert", always include "
           text: op.text,
         };
 
-        if (op.anchor_text !== undefined) {
-          if (
-            typeof op.anchor_text !== 'string' ||
-            op.anchor_text.length === 0
-          ) {
+        if (op.anchor_text !== undefined && op.anchor_text !== '') {
+          if (typeof op.anchor_text !== 'string') {
             throw new AiValidationError(
               `insert at index ${index}: "anchor_text" must be a non-empty string when provided`,
             );
